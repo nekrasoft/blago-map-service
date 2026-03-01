@@ -69,9 +69,17 @@ function init() {
 
 // ===== Загрузка и отображение бункеров =====
 
-async function loadBunkers(filters = {}) {
+function getCurrentFilters() {
+  return {
+    district: document.getElementById('filter-district').value,
+    wasteType: document.getElementById('filter-waste').value,
+    contractor: document.getElementById('filter-contractor').value
+  };
+}
+
+async function loadBunkers(filters) {
   try {
-    allBunkers = await BunkerAPI.getAll(filters);
+    allBunkers = await BunkerAPI.getAll(filters || getCurrentFilters());
     renderMarkers();
     renderList();
     updateFilterOptions();
@@ -94,7 +102,7 @@ function renderMarkers() {
         balloonContentHeader: '<strong>Бункер ' + label + '</strong>',
         balloonContentBody: buildBalloonBody(bunker),
         balloonContentFooter: buildBalloonFooter(bunker),
-        hintContent: 'Бункер ' + label + ' — ' + (bunker.contractor || bunker.address)
+        hintContent: 'Бункер ' + label + (bunker.contractor ? ' — ' + bunker.contractor : '') + (bunker.address ? ', ' + bunker.address : '')
       },
       {
         preset: 'islands#dotIcon',
@@ -105,13 +113,26 @@ function renderMarkers() {
 
     pm.events.add('dragend', function () {
       const coords = pm.geometry.getCoordinates();
-      BunkerAPI.update(bunker.id, { lat: coords[0], lng: coords[1] })
-        .then(updated => {
-          bunker.lat = updated.lat;
-          bunker.lng = updated.lng;
-          renderList();
-        })
-        .catch(err => console.error('Ошибка обновления координат:', err));
+      ymaps.geocode(coords, { results: 1 }).then(function (res) {
+        const firstGeoObject = res.geoObjects.get(0);
+        const newAddress = firstGeoObject
+          ? firstGeoObject.getAddressLine()
+          : bunker.address;
+        return BunkerAPI.update(bunker.id, {
+          lat: coords[0],
+          lng: coords[1],
+          address: newAddress
+        });
+      }).then(updated => {
+        bunker.lat = updated.lat;
+        bunker.lng = updated.lng;
+        bunker.address = updated.address;
+        pm.properties.set({
+          balloonContentBody: buildBalloonBody(bunker),
+          hintContent: 'Бункер ' + displayNumber(bunker.number) + (bunker.contractor ? ' — ' + bunker.contractor : '') + (bunker.address ? ', ' + bunker.address : '')
+        });
+        renderList();
+      }).catch(err => console.error('Ошибка обновления координат:', err));
     });
 
     pm.bunkerData = bunker;
@@ -266,6 +287,7 @@ function openCreateForm() {
   document.getElementById('form-volume').value = 8;
   document.getElementById('form-fill').value = 0;
   document.getElementById('form-pickup-date').value = new Date().toISOString().slice(0, 10);
+  formOriginalAddress = '';
 
   const center = map.getCenter();
   document.getElementById('form-lat').value = center[0].toFixed(4);
@@ -284,6 +306,7 @@ function editBunker(id) {
   document.getElementById('form-volume').value = b.volume;
   document.getElementById('form-contractor').value = b.contractor;
   document.getElementById('form-address').value = b.address;
+  formOriginalAddress = b.address;
   document.getElementById('form-district').value = b.district;
   document.getElementById('form-waste').value = b.wasteType;
   document.getElementById('form-pickup-date').value = b.lastPickupDate;
@@ -338,6 +361,38 @@ async function handleFormSubmit(e) {
   }
 }
 
+// ===== Геокодирование адреса из формы по Enter =====
+
+let formOriginalAddress = '';
+
+function handleAddressKeydown(e) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+
+  const input = document.getElementById('form-address');
+  const newAddress = input.value.trim();
+  if (!newAddress || newAddress === formOriginalAddress) return;
+
+  ymaps.geocode(newAddress, { results: 1 }).then(function (res) {
+    const geoObject = res.geoObjects.get(0);
+    if (!geoObject) {
+      alert('Адрес не найден');
+      return;
+    }
+    const coords = geoObject.geometry.getCoordinates();
+    const resolvedAddress = geoObject.getAddressLine();
+
+    document.getElementById('form-lat').value = coords[0].toFixed(6);
+    document.getElementById('form-lng').value = coords[1].toFixed(6);
+    input.value = resolvedAddress;
+    formOriginalAddress = resolvedAddress;
+
+    map.setCenter(coords, 16, { duration: 300 });
+  }).catch(function () {
+    alert('Ошибка геокодирования адреса');
+  });
+}
+
 // ===== Привязка событий =====
 
 function bindEvents() {
@@ -348,6 +403,7 @@ function bindEvents() {
   document.getElementById('filter-district').addEventListener('change', applyFilters);
   document.getElementById('filter-waste').addEventListener('change', applyFilters);
   document.getElementById('filter-contractor').addEventListener('change', applyFilters);
+  document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
 
   document.getElementById('modal-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();

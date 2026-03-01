@@ -3,85 +3,85 @@
     "id": "b0001",
     "number": 0,
     "volume": 8,
-    "address": "Ердякова 9",
+    "address": "Киров, улица Романа Ердякова, 9",
     "district": "",
     "contractor": "Алтай-Строй СМТ",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-28",
     "fillLevel": 40,
     "contactPhone": "",
-    "lat": 58.5965,
-    "lng": 49.6640
+    "lat": 58.609558,
+    "lng": 49.635809
   },
   {
     "id": "b0002",
     "number": 1,
     "volume": 8,
-    "address": "Хлебозаводской пр. 30",
+    "address": "Киров, Хлебозаводской проезд, 30",
     "district": "",
     "contractor": "Алтай-Строй",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-27",
     "fillLevel": 55,
     "contactPhone": "",
-    "lat": 58.5880,
-    "lng": 49.6380
+    "lat": 58.5946614058035,
+    "lng": 49.63968392394244
   },
   {
     "id": "b0003",
     "number": 4,
     "volume": 8,
-    "address": "Хлебозаводской пр. 30",
+    "address": "Киров, Хлебозаводской проезд, 30",
     "district": "",
     "contractor": "Алтай-Строй",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-27",
     "fillLevel": 30,
     "contactPhone": "",
-    "lat": 58.5882,
-    "lng": 49.6385
+    "lat": 58.59465284784122,
+    "lng": 49.639873291014695
   },
   {
     "id": "b0004",
     "number": 0,
     "volume": 8,
-    "address": "Хлебозаводской пр. 30",
+    "address": "Киров, Хлебозаводской проезд, 30",
     "district": "",
     "contractor": "Алтай-Строй",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-26",
     "fillLevel": 70,
     "contactPhone": "",
-    "lat": 58.5878,
-    "lng": 49.6375
+    "lat": 58.59457217620728,
+    "lng": 49.63974769115362
   },
   {
     "id": "b0005",
     "number": 0,
     "volume": 8,
-    "address": "Хлебозаводской пр. 30",
+    "address": "Киров, Хлебозаводской проезд, 30",
     "district": "",
     "contractor": "Алтай-Строй",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-25",
     "fillLevel": 20,
     "contactPhone": "",
-    "lat": 58.5884,
-    "lng": 49.6390
+    "lat": 58.594606371239486,
+    "lng": 49.639557899474575
   },
   {
     "id": "b0006",
     "number": 16,
     "volume": 8,
-    "address": "Рудницкого 14",
+    "address": "Киров, улица Рудницкого, 14",
     "district": "",
     "contractor": "Союз-Строй",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-26",
     "fillLevel": 50,
     "contactPhone": "",
-    "lat": 58.5985,
-    "lng": 49.6715
+    "lat": 58.569607,
+    "lng": 49.690005
   },
   {
     "id": "b0007",
@@ -94,8 +94,8 @@
     "lastPickupDate": "2026-02-28",
     "fillLevel": 65,
     "contactPhone": "",
-    "lat": 58.6150,
-    "lng": 49.5850
+    "lat": 58.615,
+    "lng": 49.585
   },
   {
     "id": "b0008",
@@ -137,7 +137,7 @@
     "fillLevel": 90,
     "contactPhone": "",
     "lat": 58.6155,
-    "lng": 49.5860
+    "lng": 49.586
   },
   {
     "id": "b0011",
@@ -151,7 +151,7 @@
     "fillLevel": 35,
     "contactPhone": "",
     "lat": 58.6145,
-    "lng": 49.5840
+    "lng": 49.584
   },
   {
     "id": "b0012",
@@ -171,113 +171,113 @@
     "id": "b0013",
     "number": 15,
     "volume": 8,
-    "address": "Транспортный пр. 12/23",
+    "address": "Киров, Транспортный проезд, 12/23",
     "district": "",
     "contractor": "Черепанов",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-27",
     "fillLevel": 75,
     "contactPhone": "",
-    "lat": 58.5870,
-    "lng": 49.6590
+    "lat": 58.609137,
+    "lng": 49.640166
   },
   {
     "id": "b0014",
     "number": 0,
     "volume": 8,
-    "address": "Жуковского 7",
+    "address": "Киров, улица Василия Жуковского, 7",
     "district": "",
     "contractor": "Управление домами",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-28",
     "fillLevel": 25,
     "contactPhone": "",
-    "lat": 58.5945,
-    "lng": 49.6570
+    "lat": 58.643461,
+    "lng": 49.607368
   },
   {
     "id": "b0015",
     "number": 0,
     "volume": 8,
-    "address": "Свободы 121А",
+    "address": "Киров, улица Свободы, 121А",
     "district": "",
     "contractor": "Управление домами",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-26",
     "fillLevel": 50,
     "contactPhone": "",
-    "lat": 58.6010,
-    "lng": 49.6780
+    "lat": 58.59312,
+    "lng": 49.677159
   },
   {
     "id": "b0016",
     "number": 3,
     "volume": 8,
-    "address": "Зарядное",
+    "address": "Киров, улица Дмитрия Козулева, 2к4",
     "district": "Зарядное",
     "contractor": "Азбука",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-28",
     "fillLevel": 40,
     "contactPhone": "",
-    "lat": 58.6160,
-    "lng": 49.5870
+    "lat": 58.579019,
+    "lng": 49.55815
   },
   {
     "id": "b0017",
     "number": 17,
     "volume": 8,
-    "address": "Знак",
+    "address": "Киров, улица Дмитрия Козулева, 1",
     "district": "Знак",
     "contractor": "Азбука",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-27",
     "fillLevel": 55,
     "contactPhone": "",
-    "lat": 58.6220,
-    "lng": 49.5750
+    "lat": 58.579808,
+    "lng": 49.561213
   },
   {
     "id": "b0018",
     "number": 18,
     "volume": 8,
-    "address": "Знак",
+    "address": "Киров, улица Дмитрия Козулева, 2к5",
     "district": "Знак",
     "contractor": "Азбука",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-26",
     "fillLevel": 70,
     "contactPhone": "",
-    "lat": 58.6225,
-    "lng": 49.5755
+    "lat": 58.579484,
+    "lng": 49.55938
   },
   {
     "id": "b0019",
     "number": 0,
     "volume": 8,
-    "address": "Народная 28/1",
+    "address": "Киров, Народная улица, 28/1",
     "district": "",
     "contractor": "Торнадо",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-25",
     "fillLevel": 85,
     "contactPhone": "",
-    "lat": 58.5900,
-    "lng": 49.6440
+    "lat": 58.622339,
+    "lng": 49.624742
   },
   {
     "id": "b0020",
     "number": 7,
     "volume": 8,
-    "address": "Тихая 12/1",
+    "address": "Киров, Тихая улица, 12/1",
     "district": "",
     "contractor": "Акмаш-Холдинг",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-28",
     "fillLevel": 30,
     "contactPhone": "",
-    "lat": 58.5840,
-    "lng": 49.6530
+    "lat": 58.568917,
+    "lng": 49.577077
   },
   {
     "id": "b0021",
@@ -291,7 +291,7 @@
     "fillLevel": 45,
     "contactPhone": "",
     "lat": 58.6215,
-    "lng": 49.5740
+    "lng": 49.574
   },
   {
     "id": "b0022",
@@ -304,7 +304,7 @@
     "lastPickupDate": "2026-02-27",
     "fillLevel": 60,
     "contactPhone": "",
-    "lat": 58.6210,
+    "lat": 58.621,
     "lng": 49.5735
   },
   {
@@ -333,7 +333,7 @@
     "fillLevel": 80,
     "contactPhone": "",
     "lat": 58.6222,
-    "lng": 49.5760
+    "lng": 49.576
   },
   {
     "id": "b0025",
@@ -360,8 +360,8 @@
     "lastPickupDate": "2026-02-23",
     "fillLevel": 25,
     "contactPhone": "",
-    "lat": 58.6100,
-    "lng": 49.5680
+    "lat": 58.61,
+    "lng": 49.568
   },
   {
     "id": "b0027",
@@ -378,20 +378,6 @@
     "lng": 49.5685
   },
   {
-    "id": "b0028",
-    "number": 0,
-    "volume": 8,
-    "address": "Знак",
-    "district": "Знак",
-    "contractor": "Железно-Ломовоз",
-    "wasteType": "ТБО",
-    "lastPickupDate": "2026-02-27",
-    "fillLevel": 65,
-    "contactPhone": "",
-    "lat": 58.6230,
-    "lng": 49.5770
-  },
-  {
     "id": "b0029",
     "number": 20,
     "volume": 8,
@@ -402,8 +388,8 @@
     "lastPickupDate": "2026-02-28",
     "fillLevel": 70,
     "contactPhone": "",
-    "lat": 58.6050,
-    "lng": 49.6480
+    "lat": 58.605,
+    "lng": 49.648
   },
   {
     "id": "b0030",
@@ -423,42 +409,42 @@
     "id": "b0031",
     "number": 0,
     "volume": 8,
-    "address": "Производственная 21",
+    "address": "Киров, Производственная улица, 21",
     "district": "",
     "contractor": "Алтай-Сервис",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-25",
     "fillLevel": 45,
     "contactPhone": "",
-    "lat": 58.5790,
-    "lng": 49.6360
+    "lat": 58.582524,
+    "lng": 49.607458
   },
   {
     "id": "b0032",
     "number": 0,
     "volume": 8,
-    "address": "Производственная 28",
+    "address": "Киров, Производственная улица, 28В",
     "district": "",
     "contractor": "Алтай-Сервис",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-24",
     "fillLevel": 60,
     "contactPhone": "",
-    "lat": 58.5800,
-    "lng": 49.6400
+    "lat": 58.582923,
+    "lng": 49.611977
   },
   {
     "id": "b0033",
     "number": 0,
     "volume": 8,
-    "address": "проезд Солнечный 8",
+    "address": "Киров, Солнечный проезд, 8",
     "district": "",
     "contractor": "ОптТорг",
     "wasteType": "ТБО",
     "lastPickupDate": "2026-02-27",
     "fillLevel": 35,
     "contactPhone": "",
-    "lat": 58.6080,
-    "lng": 49.6340
+    "lat": 58.583683,
+    "lng": 49.602697
   }
 ]
