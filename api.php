@@ -96,7 +96,7 @@ if ($route === 'bunkers') {
             'address'        => $body['address'] ?? '',
             'district'       => $body['district'] ?? '',
             'contractor'     => $body['contractor'] ?? '',
-            'wasteType'      => $body['wasteType'] ?? 'ТБО',
+            'wasteType'      => $body['wasteType'] ?? 'КГО',
             'lastPickupDate' => $body['lastPickupDate'] ?? date('Y-m-d'),
             'fillLevel'      => $body['fillLevel'] ?? 0,
             'contactPhone'   => $body['contactPhone'] ?? '',
