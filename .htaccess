@@ -1,0 +1,19 @@
+RewriteEngine On
+
+# /api/config → api.php?route=config
+RewriteRule ^api/config$ api.php?route=config [L,QSA]
+
+# /api/bunkers → api.php?route=bunkers
+RewriteRule ^api/bunkers$ api.php?route=bunkers [L,QSA]
+
+# /api/bunkers/{id} → api.php?route=bunkers&id={id}
+RewriteRule ^api/bunkers/(.+)$ api.php?route=bunkers&id=$1 [L,QSA]
+
+# Запрет прямого доступа к config.php
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Запрет листинга директорий
+Options -Indexes

@@ -6,85 +6,60 @@
 
 - Отображение бункеров на карте с цветовой индикацией заполненности
 - Информация о бункере по клику (контрагент, адрес, объём, заполненность, дата вывоза, телефон)
-- Перетаскивание маркеров для изменения координат (автосохранение)
-- Фильтрация по району, типу мусора и контрагенту
+- Перетаскивание маркеров для изменения координат (автосохранение + обратное геокодирование адреса)
+- Геокодирование адреса из формы редактирования (Enter в поле «Адрес»)
+- Фильтрация по району, типу мусора и контрагенту (с количеством)
 - Добавление, редактирование и удаление бункеров
-- Хранение данных в JSON-файле (33 бункера)
+- Хранение данных в JSON-файле
 
-## Требования
+## Стек
 
-- Node.js 18+
-- API-ключ Яндекс.Карт
+- **Бэкенд:** PHP (единственный файл `api.php`)
+- **Фронтенд:** Vanilla JS + Яндекс.Карты API 2.1
+- **БД:** `data/bunkers.json`
 
-## Установка
+## Установка на хостинг (Beget, поддомен map.blagokirov.ru)
 
-```bash
-npm install
-```
-
-## Настройка API-ключа Яндекс.Карт
-
-1. Получите API-ключ на [developer.tech.yandex.ru/services](https://developer.tech.yandex.ru/services)
-2. Скопируйте `.env.example` в `.env`:
+1. Создайте поддомен `map.site.ru` в панели вашего хостера
+2. Загрузите файлы в `public_html` поддомена
+3. Скопируйте `config.example.php` в `config.php`:
    ```bash
-   cp .env.example .env
+   cp config.example.php config.php
    ```
-3. Укажите свой ключ в файле `.env`:
+4. Укажите API-ключ Яндекс.Карт в `config.php`:
+   ```php
+   return [
+       'yandexMapsApiKey' => 'ваш_ключ',
+   ];
    ```
-   YANDEX_MAPS_API_KEY=ваш_ключ_здесь
+5. Убедитесь, что папка `data/` доступна для записи:
+   ```bash
+   chmod 755 data/
+   chmod 644 data/bunkers.json
    ```
-
-Файл `.env` добавлен в `.gitignore` и не попадёт в репозиторий.
-
-## Запуск
-
-```bash
-npm start
-```
-
-Сервер запустится на [http://localhost:3000](http://localhost:3000).
-
-Для разработки с автоперезагрузкой (Node.js 18+):
-
-```bash
-npm run dev
-```
 
 ## REST API
 
 | Метод  | Путь               | Описание                                                      |
 |--------|---------------------|---------------------------------------------------------------|
+| GET    | /api/config         | Конфигурация (API-ключ карт)                                  |
 | GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...)  |
 | POST   | /api/bunkers        | Создание бункера                                              |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |
 | DELETE | /api/bunkers/:id    | Удаление бункера                                              |
 
-## Модель данных бункера
-
-| Поле           | Тип    | Описание                              |
-|----------------|--------|---------------------------------------|
-| id             | string | Уникальный идентификатор              |
-| number         | number | Номер бункера (0 — без номера)        |
-| volume         | number | Объём (м³)                            |
-| contractor     | string | Контрагент (название фирмы заказчика) |
-| address        | string | Адрес                                 |
-| district       | string | Район                                 |
-| wasteType      | string | Тип мусора (ТБО, КГМ, Строительный)  |
-| lastPickupDate | string | Дата последнего вывоза (YYYY-MM-DD)   |
-| fillLevel      | number | Заполненность (0-100%)                |
-| contactPhone   | string | Телефон для заказа                    |
-| lat            | number | Широта                                |
-| lng            | number | Долгота                               |
-
 ## Структура проекта
 
 ```
 map-service/
-  server.js              — Express-сервер
-  data/bunkers.json      — данные бункеров (33 шт.)
-  public/
-    index.html           — главная страница
-    css/styles.css       — стили
-    js/api.js            — обёртка над REST API
-    js/app.js            — логика карты и интерфейса
+  .htaccess              — URL-rewriting для /api/*
+  index.html             — главная страница
+  api.php                — REST API (PHP)
+  config.php             — настройки (API-ключ, gitignored)
+  config.example.php     — пример настроек
+  data/bunkers.json      — данные бункеров
+  css/styles.css         — стили
+  js/api.js              — обёртка над REST API
+  js/app.js              — логика карты и интерфейса
+  _node_version/         — бэкап Node.js-версии
 ```
