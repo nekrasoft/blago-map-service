@@ -83,6 +83,7 @@ async function loadBunkers(filters) {
     renderMarkers();
     renderList();
     updateFilterOptions();
+    document.getElementById('bunker-count').textContent = allBunkers.length;
   } catch (err) {
     console.error('Ошибка загрузки:', err);
   }
@@ -233,6 +234,13 @@ function updateFilterOptions() {
   const wasteTypes = [...new Set(allBunkers.map(b => b.wasteType).filter(Boolean))].sort();
   const contractors = [...new Set(allBunkers.map(b => b.contractor).filter(Boolean))].sort();
 
+  const contractorCounts = {};
+  allBunkers.forEach(b => {
+    if (b.contractor) {
+      contractorCounts[b.contractor] = (contractorCounts[b.contractor] || 0) + 1;
+    }
+  });
+
   districtSelect.innerHTML = '<option value="">Все районы</option>';
   districts.forEach(d => {
     const opt = document.createElement('option');
@@ -255,7 +263,7 @@ function updateFilterOptions() {
   contractors.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c;
-    opt.textContent = c;
+    opt.textContent = c + ' (' + contractorCounts[c] + ')';
     if (c === currentContractor) opt.selected = true;
     contractorSelect.appendChild(opt);
   });

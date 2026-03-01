@@ -38,6 +38,18 @@ body {
   font-size: 1.3rem;
   font-weight: 700;
   color: #1a1a2e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #4361ee;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .filters {
