@@ -1,0 +1,15 @@
+{
+  "name": "map-service",
+  "version": "1.0.0",
+  "description": "Сервис размещения бункеров на карте (Яндекс.Карты)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^4.21.0",
+    "uuid": "^11.1.0"
+  }
+}
