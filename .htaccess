@@ -1,5 +1,10 @@
 RewriteEngine On
 
+# Единая каноническая версия: HTTPS + основной хост.
+RewriteCond %{HTTPS} !=on [OR]
+RewriteCond %{HTTP_HOST} !^map.blagokirov\.ru$ [NC]
+RewriteRule ^ https://map.blagokirov.ru%{REQUEST_URI} [R=301,L]
+
 # /api/config → api.php?route=config
 RewriteRule ^api/config$ api.php?route=config [L,QSA]
 
