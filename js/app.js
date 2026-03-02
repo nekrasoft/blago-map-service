@@ -213,6 +213,7 @@ function renderList() {
       map.setCenter([b.lat, b.lng], 15, { duration: 300 });
       const pm = placemarks.find(p => p.bunkerData && p.bunkerData.id === b.id);
       if (pm) pm.balloon.open();
+      hideSidebar();
     });
 
     list.appendChild(li);
@@ -432,6 +433,16 @@ async function handleAddressKeydown(e) {
   }
 }
 
+// ===== Скрытие/показ панели (для мобильных) =====
+
+function hideSidebar() {
+  document.body.classList.add('sidebar-hidden');
+}
+
+function showSidebar() {
+  document.body.classList.remove('sidebar-hidden');
+}
+
 // ===== Привязка событий =====
 
 function bindEvents() {
@@ -443,6 +454,7 @@ function bindEvents() {
   document.getElementById('filter-waste').addEventListener('change', applyFilters);
   document.getElementById('filter-contractor').addEventListener('change', applyFilters);
   document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
+  document.getElementById('btn-toggle-sidebar').addEventListener('click', showSidebar);
 
   document.getElementById('modal-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();

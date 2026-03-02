@@ -24,6 +24,34 @@ body {
   flex-direction: column;
   z-index: 10;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.25s ease;
+}
+
+body.sidebar-hidden #sidebar {
+  transform: translateX(-100%);
+}
+
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  padding: 10px 12px;
+  background: #4361ee;
+  color: #fff;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  transition: left 0.25s ease;
+}
+
+body.sidebar-hidden .sidebar-toggle {
+  display: block;
 }
 
 .sidebar-header {
@@ -346,4 +374,21 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ===== Мобильные устройства ===== */
+
+@media (max-width: 768px) {
+  #sidebar {
+    width: 85%;
+    min-width: 280px;
+    position: fixed;
+    left: 0;
+    top: 0;
+  }
+
+  .sidebar-toggle {
+    padding: 12px 14px;
+    font-size: 0.85rem;
+  }
 }
