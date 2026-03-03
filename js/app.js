@@ -443,6 +443,20 @@ function showSidebar() {
   document.body.classList.remove('sidebar-hidden');
 }
 
+function isMobileView() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+// Свайп влево для скрытия панели
+let touchStartX = 0;
+function handleSidebarTouchStart(e) {
+  touchStartX = e.touches[0].clientX;
+}
+function handleSidebarTouchEnd(e) {
+  const touchEndX = e.changedTouches[0].clientX;
+  if (touchStartX - touchEndX > 60) hideSidebar();
+}
+
 // ===== Привязка событий =====
 
 function bindEvents() {
@@ -458,5 +472,17 @@ function bindEvents() {
 
   document.getElementById('modal-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
+  });
+
+  const sidebar = document.getElementById('sidebar');
+  const mapEl = document.getElementById('map');
+
+  sidebar.addEventListener('touchstart', handleSidebarTouchStart);
+  sidebar.addEventListener('touchend', handleSidebarTouchEnd);
+
+  mapEl.addEventListener('click', function () {
+    if (isMobileView() && !document.body.classList.contains('sidebar-hidden')) {
+      hideSidebar();
+    }
   });
 }
