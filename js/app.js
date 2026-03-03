@@ -284,7 +284,7 @@ async function applyFilters() {
 function fitMapToBunkers() {
   if (allBunkers.length === 0) return;
   if (allBunkers.length === 1) {
-    map.setCenter([allBunkers[0].lat, allBunkers[0].lng], 16, { duration: 300 });
+    map.setCenter([allBunkers[0].lat, allBunkers[0].lng], 15, { duration: 300 });
     return;
   }
   var bounds = placemarks.reduce(function (acc, pm) {
@@ -294,7 +294,9 @@ function fitMapToBunkers() {
       [Math.max(acc[1][0], coords[0]), Math.max(acc[1][1], coords[1])]
     ];
   }, [[90, 180], [-90, -180]]);
-  map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 40, duration: 300 });
+  map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 40, duration: 300 }).then(function () {
+    if (map.getZoom() > 16) map.setZoom(16);
+  });
 }
 
 // ===== Модальное окно (CRUD) =====
