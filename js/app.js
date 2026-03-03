@@ -3,8 +3,8 @@ let placemarks = [];
 let allBunkers = [];
 let allFilterOptions = { districts: [], wasteTypes: [], contractors: [] };
 let allBunkersUnfiltered = [];
-let isAuthed = false;
-let currentUser = null;
+// Страница карты доступна только после авторизации (проверка в index.php)
+let isAuthed = true;
 
 const DEFAULT_CENTER = [58.6035, 49.6668];
 const DEFAULT_ZOOM = 13;
@@ -37,9 +37,6 @@ function displayNumber(num) {
 
 (async function bootstrap() {
   try {
-    currentUser = await AuthAPI.check();
-    isAuthed = !!currentUser;
-    if (typeof updateAuthUI === 'function') updateAuthUI();
     bindAuthEvents();
 
     const res = await fetch('/api/config');
@@ -57,10 +54,7 @@ function displayNumber(num) {
     script.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(config.yandexMapsApiKey) + '&lang=ru_RU';
     script.type = 'text/javascript';
     script.onload = function () {
-      ymaps.ready(function () {
-        init();
-        updateAuthUI();
-      });
+      ymaps.ready(init);
     };
     document.head.appendChild(script);
   } catch (err) {
@@ -161,7 +155,7 @@ function renderMarkers() {
         });
         renderList();
       }).catch(function (err) {
-      if (err.message === 'auth_required') showLoginModal();
+      if (err.message === 'auth_required') window.location.href = '/login';
       else console.error('Ошибка обновления координат:', err);
     });
     });
@@ -399,7 +393,7 @@ async function deleteBunker(id) {
     await loadBunkers();
   } catch (err) {
     if (err.message === 'auth_required') {
-      showLoginModal();
+      window.location.href = '/login';
       return;
     }
     console.error('Ошибка удаления:', err);
@@ -471,7 +465,7 @@ async function handleFormSubmit(e) {
     await loadBunkers();
   } catch (err) {
     if (err.message === 'auth_required') {
-      showLoginModal();
+      window.location.href = '/login';
       return;
     }
     console.error('Ошибка сохранения:', err);
@@ -533,65 +527,14 @@ function handleSidebarTouchEnd(e) {
 
 // ===== Авторизация =====
 
-function updateAuthUI() {
-  const btnLogin = document.getElementById('btn-login');
-  const btnLogout = document.getElementById('btn-logout');
-  const userSpan = document.getElementById('auth-user');
-  const btnAdd = document.getElementById('btn-add');
-  if (btnLogin) btnLogin.classList.toggle('hidden', isAuthed);
-  if (btnLogout) btnLogout.classList.toggle('hidden', !isAuthed);
-  if (userSpan) userSpan.classList.toggle('hidden', !isAuthed);
-  if (userSpan) userSpan.textContent = isAuthed ? (currentUser || '') : '';
-  if (btnAdd) btnAdd.classList.toggle('hidden', !isAuthed);
-  if (typeof renderMarkers === 'function' && placemarks.length) renderMarkers();
-}
-
-function showLoginModal() {
-  document.getElementById('login-overlay').classList.remove('hidden');
-  document.getElementById('login-error').classList.add('hidden');
-}
-
-function closeLoginModal() {
-  document.getElementById('login-overlay').classList.add('hidden');
-  document.getElementById('login-form').reset();
-}
-
-async function handleLoginSubmit(e) {
-  e.preventDefault();
-  const login = document.getElementById('login-input').value.trim();
-  const password = document.getElementById('login-password').value;
-  const errEl = document.getElementById('login-error');
-  errEl.classList.add('hidden');
-  try {
-    currentUser = await AuthAPI.login(login, password);
-    isAuthed = true;
-    closeLoginModal();
-    updateAuthUI();
-  } catch (err) {
-    errEl.textContent = err.message || 'Ошибка входа';
-    errEl.classList.remove('hidden');
-  }
-}
-
 async function handleLogout() {
   await AuthAPI.logout();
-  isAuthed = false;
-  currentUser = null;
-  updateAuthUI();
+  window.location.href = '/login';
 }
 
 function bindAuthEvents() {
-  const btnLogin = document.getElementById('btn-login');
   const btnLogout = document.getElementById('btn-logout');
-  const loginForm = document.getElementById('login-form');
-  const loginClose = document.getElementById('login-close');
-  if (btnLogin) btnLogin.addEventListener('click', showLoginModal);
   if (btnLogout) btnLogout.addEventListener('click', handleLogout);
-  if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
-  if (loginClose) loginClose.addEventListener('click', closeLoginModal);
-  document.getElementById('login-overlay')?.addEventListener('click', function (e) {
-    if (e.target === this) closeLoginModal();
-  });
 }
 
 // ===== Привязка событий =====
