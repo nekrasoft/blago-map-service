@@ -94,6 +94,9 @@ function getCurrentFilters() {
 async function loadBunkers(filters) {
   try {
     allBunkers = await BunkerAPI.getAll(filters || getCurrentFilters());
+    if (document.getElementById('filter-full').checked) {
+      allBunkers = allBunkers.filter(b => b.fillLevel > 70);
+    }
     renderMarkers();
     renderList();
     updateFilterOptions();
@@ -298,7 +301,8 @@ async function applyFilters() {
   const district = document.getElementById('filter-district').value;
   const wasteType = document.getElementById('filter-waste').value;
   const contractor = document.getElementById('filter-contractor').value;
-  const hasFilter = district || wasteType || contractor;
+  const onlyFull = document.getElementById('filter-full').checked;
+  const hasFilter = district || wasteType || contractor || onlyFull;
   await loadBunkers({ district, wasteType, contractor });
   if (hasFilter && allBunkers.length > 0) {
     fitMapToBunkers();
@@ -515,6 +519,7 @@ function bindEvents() {
   document.getElementById('filter-district').addEventListener('change', applyFilters);
   document.getElementById('filter-waste').addEventListener('change', applyFilters);
   document.getElementById('filter-contractor').addEventListener('change', applyFilters);
+  document.getElementById('filter-full').addEventListener('change', applyFilters);
   document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
   document.getElementById('btn-toggle-sidebar').addEventListener('click', showSidebar);
 

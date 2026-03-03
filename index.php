@@ -25,6 +25,7 @@
       <select id="filter-contractor">
         <option value="">Все контрагенты</option>
       </select>
+      <label class="filter-checkbox"><input type="checkbox" id="filter-full"> Заполненные</label>
     </div>
 
     <ul id="bunker-list"></ul>

@@ -105,6 +105,22 @@ body.sidebar-hidden .sidebar-toggle {
   border-color: #4361ee;
 }
 
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 4px 0;
+}
+
+.filter-checkbox input {
+  accent-color: #e74c3c;
+}
+
 #bunker-list {
   list-style: none;
   flex: 1;
