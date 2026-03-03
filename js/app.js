@@ -213,7 +213,7 @@ function renderList() {
       map.setCenter([b.lat, b.lng], 15, { duration: 300 });
       const pm = placemarks.find(p => p.bunkerData && p.bunkerData.id === b.id);
       if (pm) pm.balloon.open();
-      hideSidebar();
+      if (isMobileView()) hideSidebar();
     });
 
     list.appendChild(li);
