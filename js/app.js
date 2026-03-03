@@ -480,10 +480,12 @@ function bindEvents() {
   sidebar.addEventListener('touchstart', handleSidebarTouchStart);
   sidebar.addEventListener('touchend', handleSidebarTouchEnd);
 
+  var toggleBtn = document.getElementById('btn-toggle-sidebar');
   function hideSidebarOnOutsideTap(e) {
     if (!isMobileView()) return;
     if (document.body.classList.contains('sidebar-hidden')) return;
     if (sidebar.contains(e.target)) return;
+    if (toggleBtn.contains(e.target)) return;
     hideSidebar();
   }
 
