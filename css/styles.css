@@ -54,6 +54,21 @@ body.sidebar-hidden .sidebar-toggle {
   display: block;
 }
 
+.sidebar-auth {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sidebar-auth .auth-user {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+}
+
 .sidebar-header {
   padding: 20px;
   display: flex;
@@ -258,17 +273,6 @@ body.sidebar-hidden .sidebar-toggle {
   display: none !important;
 }
 
-.sidebar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.auth-user {
-  font-size: 0.85rem;
-  color: #555;
-}
 
 .login-error {
   padding: 8px 0;

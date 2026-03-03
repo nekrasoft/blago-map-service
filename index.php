@@ -14,13 +14,13 @@ requireMapAuth($config);
 
   <!-- Боковая панель -->
   <aside id="sidebar">
+    <div class="sidebar-auth">
+      <span id="auth-user" class="auth-user"><?= htmlspecialchars($_SESSION['user'] ?? '') ?></span>
+      <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
+    </div>
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>
-      <div class="sidebar-actions">
-        <span id="auth-user" class="auth-user"><?= htmlspecialchars($_SESSION['user'] ?? '') ?></span>
-        <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
-        <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
-      </div>
+      <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
     </div>
 
     <div class="filters">
