@@ -270,11 +270,31 @@ function updateFilterOptions() {
   });
 }
 
-function applyFilters() {
+async function applyFilters() {
   const district = document.getElementById('filter-district').value;
   const wasteType = document.getElementById('filter-waste').value;
   const contractor = document.getElementById('filter-contractor').value;
-  loadBunkers({ district, wasteType, contractor });
+  const hasFilter = district || wasteType || contractor;
+  await loadBunkers({ district, wasteType, contractor });
+  if (hasFilter && allBunkers.length > 0) {
+    fitMapToBunkers();
+  }
+}
+
+function fitMapToBunkers() {
+  if (allBunkers.length === 0) return;
+  if (allBunkers.length === 1) {
+    map.setCenter([allBunkers[0].lat, allBunkers[0].lng], 16, { duration: 300 });
+    return;
+  }
+  var bounds = placemarks.reduce(function (acc, pm) {
+    var coords = pm.geometry.getCoordinates();
+    return [
+      [Math.min(acc[0][0], coords[0]), Math.min(acc[0][1], coords[1])],
+      [Math.max(acc[1][0], coords[0]), Math.max(acc[1][1], coords[1])]
+    ];
+  }, [[90, 180], [-90, -180]]);
+  map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 40, duration: 300 });
 }
 
 // ===== Модальное окно (CRUD) =====
