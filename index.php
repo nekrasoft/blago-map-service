@@ -12,7 +12,12 @@
   <aside id="sidebar">
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>
-      <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
+      <div class="sidebar-actions">
+        <span id="auth-user" class="auth-user hidden"></span>
+        <button id="btn-login" class="btn btn-secondary" title="Войти">Войти</button>
+        <button id="btn-logout" class="btn btn-secondary hidden" title="Выйти">Выйти</button>
+        <button id="btn-add" class="btn btn-primary hidden" title="Добавить бункер">+ Добавить</button>
+      </div>
     </div>
 
     <div class="filters">
@@ -95,6 +100,30 @@
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Сохранить</button>
           <button type="button" id="btn-cancel" class="btn btn-secondary">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модальное окно авторизации -->
+  <div id="login-overlay" class="modal-overlay hidden">
+    <div class="modal modal-login">
+      <div class="modal-header">
+        <h2>Вход</h2>
+        <button id="login-close" class="btn-icon" title="Закрыть">&times;</button>
+      </div>
+      <form id="login-form">
+        <div class="form-row">
+          <label for="login-input">Логин</label>
+          <input type="text" id="login-input" name="login" autocomplete="username" required>
+        </div>
+        <div class="form-row">
+          <label for="login-password">Пароль</label>
+          <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="login-error hidden"></div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Войти</button>
         </div>
       </form>
     </div>

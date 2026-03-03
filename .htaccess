@@ -8,6 +8,15 @@ RewriteRule ^ https://map.blagokirov.ru%{REQUEST_URI} [R=301,L]
 # /api/config → api.php?route=config
 RewriteRule ^api/config$ api.php?route=config [L,QSA]
 
+# /api/auth → api.php?route=auth
+RewriteRule ^api/auth$ api.php?route=auth [L,QSA]
+
+# /api/login → api.php?route=login
+RewriteRule ^api/login$ api.php?route=login [L,QSA]
+
+# /api/logout → api.php?route=logout
+RewriteRule ^api/logout$ api.php?route=logout [L,QSA]
+
 # /api/bunkers → api.php?route=bunkers
 RewriteRule ^api/bunkers$ api.php?route=bunkers [L,QSA]
 

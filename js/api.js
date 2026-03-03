@@ -1,3 +1,24 @@
+const AuthAPI = {
+  async check() {
+    const res = await fetch('/api/auth');
+    const data = await res.json();
+    return data.authenticated ? data.user : null;
+  },
+  async login(login, password) {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка авторизации');
+    return data.user;
+  },
+  async logout() {
+    await fetch('/api/logout', { method: 'POST' });
+  }
+};
+
 const BunkerAPI = {
   async getAll(params = {}) {
     const query = new URLSearchParams();
@@ -17,6 +38,7 @@ const BunkerAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    if (res.status === 401) throw new Error('auth_required');
     if (!res.ok) throw new Error('Ошибка создания бункера');
     return res.json();
   },
@@ -27,14 +49,14 @@ const BunkerAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    if (res.status === 401) throw new Error('auth_required');
     if (!res.ok) throw new Error('Ошибка обновления бункера');
     return res.json();
   },
 
   async remove(id) {
-    const res = await fetch('/api/bunkers/' + id, {
-      method: 'DELETE'
-    });
+    const res = await fetch('/api/bunkers/' + id, { method: 'DELETE' });
+    if (res.status === 401) throw new Error('auth_required');
     if (!res.ok) throw new Error('Ошибка удаления бункера');
     return res.json();
   }

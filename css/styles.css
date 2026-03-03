@@ -254,6 +254,32 @@ body.sidebar-hidden .sidebar-toggle {
   display: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.auth-user {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.login-error {
+  padding: 8px 0;
+  color: #e74c3c;
+  font-size: 0.85rem;
+}
+
+.modal-login {
+  width: 320px;
+}
+
 .modal {
   background: #fff;
   border-radius: 12px;

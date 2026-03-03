@@ -1,8 +1,24 @@
 <?php
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 
 $configFile = __DIR__ . '/config.php';
 $dataFile   = __DIR__ . '/data/bunkers.json';
+$envFile    = __DIR__ . '/.env';
+
+// --- Загрузка .env ---
+if (file_exists($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (strpos($line, '=') === false) continue;
+        [$key, $val] = explode('=', $line, 2);
+        $key = trim($key);
+        $val = trim($val, " \t\n\r\"'");
+        putenv("$key=$val");
+        $_ENV[$key] = $val;
+    }
+}
 
 // --- Конфигурация ---
 $config = file_exists($configFile) ? require $configFile : [];
@@ -46,6 +62,17 @@ function jsonResponse($data, $code = 200) {
     exit;
 }
 
+function isAuthed($config) {
+    if (empty($config['users'])) return true; // без настройки users — доступ без авторизации
+    return isset($_SESSION['user']);
+}
+
+function requireAuth($config) {
+    if (!isAuthed($config)) {
+        jsonResponse(['error' => 'Требуется авторизация'], 401);
+    }
+}
+
 // --- Роуты ---
 
 // GET /api/config
@@ -53,6 +80,44 @@ if ($route === 'config' && $method === 'GET') {
     jsonResponse([
         'yandexMapsApiKey' => $config['yandexMapsApiKey'] ?? ''
     ]);
+}
+
+// GET /api/auth — проверка авторизации
+if ($route === 'auth' && $method === 'GET') {
+    jsonResponse([
+        'authenticated' => isAuthed($config),
+        'user'          => $_SESSION['user'] ?? null
+    ]);
+}
+
+// POST /api/login — вход
+if ($route === 'login' && $method === 'POST') {
+    $body = getRequestBody();
+    $login = trim($body['login'] ?? '');
+    $pass = $body['password'] ?? '';
+
+    if (empty($config['users'])) {
+        jsonResponse(['error' => 'Авторизация не настроена'], 400);
+    }
+
+    if (!$login || !$pass) {
+        jsonResponse(['error' => 'Укажите логин и пароль'], 400);
+    }
+
+    $hash = $config['users'][$login] ?? null;
+    if (!$hash || !password_verify($pass, $hash)) {
+        jsonResponse(['error' => 'Неверный логин или пароль'], 401);
+    }
+
+    $_SESSION['user'] = $login;
+    jsonResponse(['user' => $login]);
+}
+
+// POST /api/logout — выход
+if ($route === 'logout' && $method === 'POST') {
+    $_SESSION = [];
+    session_destroy();
+    jsonResponse(['success' => true]);
 }
 
 // /api/bunkers
@@ -86,6 +151,7 @@ if ($route === 'bunkers') {
 
     // POST /api/bunkers — создание
     if ($method === 'POST' && !$id) {
+        requireAuth($config);
         $body = getRequestBody();
         $bunkers = readBunkers($dataFile);
 
@@ -111,6 +177,7 @@ if ($route === 'bunkers') {
 
     // PUT /api/bunkers/:id — обновление
     if ($method === 'PUT' && $id) {
+        requireAuth($config);
         $body = getRequestBody();
         $bunkers = readBunkers($dataFile);
         $index = null;
@@ -134,6 +201,7 @@ if ($route === 'bunkers') {
 
     // DELETE /api/bunkers/:id — удаление
     if ($method === 'DELETE' && $id) {
+        requireAuth($config);
         $bunkers = readBunkers($dataFile);
         $found = false;
 
