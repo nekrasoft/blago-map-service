@@ -1,6 +1,8 @@
 let map;
 let placemarks = [];
 let allBunkers = [];
+let allFilterOptions = { districts: [], wasteTypes: [], contractors: [] };
+let allBunkersUnfiltered = [];
 
 const DEFAULT_CENTER = [58.6035, 49.6668];
 const DEFAULT_ZOOM = 13;
@@ -63,8 +65,20 @@ function init() {
     controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
   });
 
+  refreshFilterOptions();
   loadBunkers();
   bindEvents();
+}
+
+async function refreshFilterOptions() {
+  try {
+    allBunkersUnfiltered = await BunkerAPI.getAll({});
+    allFilterOptions.districts = [...new Set(allBunkersUnfiltered.map(b => b.district).filter(Boolean))].sort();
+    allFilterOptions.wasteTypes = [...new Set(allBunkersUnfiltered.map(b => b.wasteType).filter(Boolean))].sort();
+    allFilterOptions.contractors = [...new Set(allBunkersUnfiltered.map(b => b.contractor).filter(Boolean))].sort();
+  } catch (err) {
+    console.error('Ошибка загрузки опций фильтров:', err);
+  }
 }
 
 // ===== Загрузка и отображение бункеров =====
@@ -222,6 +236,20 @@ function renderList() {
 
 // ===== Фильтры =====
 
+function countByField(field, otherFilters) {
+  var counts = {};
+  allBunkersUnfiltered.forEach(function (b) {
+    var match = true;
+    if (otherFilters.district && b.district !== otherFilters.district) match = false;
+    if (otherFilters.wasteType && b.wasteType !== otherFilters.wasteType) match = false;
+    if (otherFilters.contractor && b.contractor !== otherFilters.contractor) match = false;
+    if (match && b[field]) {
+      counts[b[field]] = (counts[b[field]] || 0) + 1;
+    }
+  });
+  return counts;
+}
+
 function updateFilterOptions() {
   const districtSelect = document.getElementById('filter-district');
   const wasteSelect = document.getElementById('filter-waste');
@@ -231,40 +259,36 @@ function updateFilterOptions() {
   const currentWaste = wasteSelect.value;
   const currentContractor = contractorSelect.value;
 
-  const districts = [...new Set(allBunkers.map(b => b.district).filter(Boolean))].sort();
-  const wasteTypes = [...new Set(allBunkers.map(b => b.wasteType).filter(Boolean))].sort();
-  const contractors = [...new Set(allBunkers.map(b => b.contractor).filter(Boolean))].sort();
-
-  const contractorCounts = {};
-  allBunkers.forEach(b => {
-    if (b.contractor) {
-      contractorCounts[b.contractor] = (contractorCounts[b.contractor] || 0) + 1;
-    }
-  });
+  const districtCounts = countByField('district', { wasteType: currentWaste, contractor: currentContractor });
+  const wasteCounts = countByField('wasteType', { district: currentDistrict, contractor: currentContractor });
+  const contractorCounts = countByField('contractor', { district: currentDistrict, wasteType: currentWaste });
 
   districtSelect.innerHTML = '<option value="">Все районы</option>';
-  districts.forEach(d => {
+  allFilterOptions.districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
-    opt.textContent = d;
+    var cnt = districtCounts[d] || 0;
+    opt.textContent = d + ' (' + cnt + ')';
     if (d === currentDistrict) opt.selected = true;
     districtSelect.appendChild(opt);
   });
 
   wasteSelect.innerHTML = '<option value="">Все типы мусора</option>';
-  wasteTypes.forEach(w => {
+  allFilterOptions.wasteTypes.forEach(w => {
     const opt = document.createElement('option');
     opt.value = w;
-    opt.textContent = w;
+    var cnt = wasteCounts[w] || 0;
+    opt.textContent = w + ' (' + cnt + ')';
     if (w === currentWaste) opt.selected = true;
     wasteSelect.appendChild(opt);
   });
 
   contractorSelect.innerHTML = '<option value="">Все контрагенты</option>';
-  contractors.forEach(c => {
+  allFilterOptions.contractors.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c;
-    opt.textContent = c + ' (' + contractorCounts[c] + ')';
+    var cnt = contractorCounts[c] || 0;
+    opt.textContent = c + ' (' + cnt + ')';
     if (c === currentContractor) opt.selected = true;
     contractorSelect.appendChild(opt);
   });
@@ -353,6 +377,7 @@ async function deleteBunker(id) {
   try {
     map.balloon.close();
     await BunkerAPI.remove(id);
+    await refreshFilterOptions();
     await loadBunkers();
   } catch (err) {
     console.error('Ошибка удаления:', err);
@@ -420,6 +445,7 @@ async function handleFormSubmit(e) {
       await BunkerAPI.create(data);
     }
     closeModal();
+    await refreshFilterOptions();
     await loadBunkers();
   } catch (err) {
     console.error('Ошибка сохранения:', err);
