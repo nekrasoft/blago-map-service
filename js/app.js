@@ -480,9 +480,13 @@ function bindEvents() {
   sidebar.addEventListener('touchstart', handleSidebarTouchStart);
   sidebar.addEventListener('touchend', handleSidebarTouchEnd);
 
-  mapEl.addEventListener('click', function () {
-    if (isMobileView() && !document.body.classList.contains('sidebar-hidden')) {
-      hideSidebar();
-    }
-  });
+  function hideSidebarOnOutsideTap(e) {
+    if (!isMobileView()) return;
+    if (document.body.classList.contains('sidebar-hidden')) return;
+    if (sidebar.contains(e.target)) return;
+    hideSidebar();
+  }
+
+  document.addEventListener('click', hideSidebarOnOutsideTap);
+  document.addEventListener('touchstart', hideSidebarOnOutsideTap);
 }
