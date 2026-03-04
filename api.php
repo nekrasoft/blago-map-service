@@ -67,6 +67,17 @@ function isAuthed($config) {
     return isset($_SESSION['user']);
 }
 
+/** Проверка API-ключа бота (X-API-Key или Authorization: Bearer) — для записи без сессии */
+function isBotAuthed($config) {
+    $key = $config['botApiKey'] ?? '';
+    if (!$key) return false;
+    $header = $_SERVER['HTTP_X_API_KEY'] ?? '';
+    if ($header === $key) return true;
+    $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (preg_match('/^Bearer\s+(.+)$/i', trim($auth), $m) && $m[1] === $key) return true;
+    return false;
+}
+
 function requireAuth($config) {
     if (!isAuthed($config)) {
         jsonResponse(['error' => 'Требуется авторизация'], 401);
@@ -74,6 +85,7 @@ function requireAuth($config) {
 }
 
 function requireWriteAuth($config) {
+    if (isBotAuthed($config)) return; // бот с API-ключом — пропускаем
     requireAuth($config);
     if (!empty($_SESSION['readonly'])) {
         jsonResponse(['error' => 'Доступ только для чтения'], 403);

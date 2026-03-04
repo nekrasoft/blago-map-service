@@ -14,4 +14,7 @@ return [
     // Пользователи: admin — полный доступ, demo — только чтение
     'users'         => $users,
     'readonlyUsers' => $demoHash ? [$demoLogin] : [],
+
+    // API-ключ для бота отчётов (запись fillLevel без сессии)
+    'botApiKey' => getenv('MAP_BOT_API_KEY') ?: '',
 ];
