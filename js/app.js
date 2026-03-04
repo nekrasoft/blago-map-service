@@ -549,7 +549,8 @@ function bindAuthEvents() {
 // ===== Привязка событий =====
 
 function bindEvents() {
-  document.getElementById('btn-add').addEventListener('click', openCreateForm);
+  const btnAdd = document.getElementById('btn-add');
+  if (btnAdd) btnAdd.addEventListener('click', openCreateForm);
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('btn-cancel').addEventListener('click', closeModal);
   document.getElementById('bunker-form').addEventListener('submit', handleFormSubmit);
