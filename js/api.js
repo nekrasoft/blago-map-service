@@ -39,6 +39,7 @@ const BunkerAPI = {
       body: JSON.stringify(data)
     });
     if (res.status === 401) throw new Error('auth_required');
+    if (res.status === 403) throw new Error('readonly');
     if (!res.ok) throw new Error('Ошибка создания бункера');
     return res.json();
   },
@@ -50,6 +51,7 @@ const BunkerAPI = {
       body: JSON.stringify(data)
     });
     if (res.status === 401) throw new Error('auth_required');
+    if (res.status === 403) throw new Error('readonly');
     if (!res.ok) throw new Error('Ошибка обновления бункера');
     return res.json();
   },
@@ -57,6 +59,7 @@ const BunkerAPI = {
   async remove(id) {
     const res = await fetch('/api/bunkers/' + id, { method: 'DELETE' });
     if (res.status === 401) throw new Error('auth_required');
+    if (res.status === 403) throw new Error('readonly');
     if (!res.ok) throw new Error('Ошибка удаления бункера');
     return res.json();
   }

@@ -73,6 +73,13 @@ function requireAuth($config) {
     }
 }
 
+function requireWriteAuth($config) {
+    requireAuth($config);
+    if (!empty($_SESSION['readonly'])) {
+        jsonResponse(['error' => 'Доступ только для чтения'], 403);
+    }
+}
+
 // --- Роуты ---
 
 // GET /api/config
@@ -86,7 +93,8 @@ if ($route === 'config' && $method === 'GET') {
 if ($route === 'auth' && $method === 'GET') {
     jsonResponse([
         'authenticated' => isAuthed($config),
-        'user'          => $_SESSION['user'] ?? null
+        'user'          => $_SESSION['user'] ?? null,
+        'readonly'      => !empty($_SESSION['readonly'])
     ]);
 }
 
@@ -110,7 +118,8 @@ if ($route === 'login' && $method === 'POST') {
     }
 
     $_SESSION['user'] = $login;
-    jsonResponse(['user' => $login]);
+    $_SESSION['readonly'] = in_array($login, $config['readonlyUsers'] ?? [], true);
+    jsonResponse(['user' => $login, 'readonly' => $_SESSION['readonly']]);
 }
 
 // POST /api/logout — выход
@@ -151,7 +160,7 @@ if ($route === 'bunkers') {
 
     // POST /api/bunkers — создание
     if ($method === 'POST' && !$id) {
-        requireAuth($config);
+        requireWriteAuth($config);
         $body = getRequestBody();
         $bunkers = readBunkers($dataFile);
 
@@ -177,7 +186,7 @@ if ($route === 'bunkers') {
 
     // PUT /api/bunkers/:id — обновление
     if ($method === 'PUT' && $id) {
-        requireAuth($config);
+        requireWriteAuth($config);
         $body = getRequestBody();
         $bunkers = readBunkers($dataFile);
         $index = null;
@@ -201,7 +210,7 @@ if ($route === 'bunkers') {
 
     // DELETE /api/bunkers/:id — удаление
     if ($method === 'DELETE' && $id) {
-        requireAuth($config);
+        requireWriteAuth($config);
         $bunkers = readBunkers($dataFile);
         $found = false;
 

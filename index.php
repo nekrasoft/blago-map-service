@@ -20,7 +20,9 @@ requireMapAuth($config);
     </div>
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>
+      <?php if (empty($_SESSION['readonly'])): ?>
       <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
+      <?php endif; ?>
     </div>
 
     <div class="filters">
@@ -108,6 +110,7 @@ requireMapAuth($config);
     </div>
   </div>
 
+  <script>window.READONLY_USER = <?= json_encode(!empty($_SESSION['readonly'])) ?>;</script>
   <script src="/js/api.js?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/js/api.js') ?>"></script>
   <script src="/js/app.js?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/js/app.js') ?>"></script>
 </body>

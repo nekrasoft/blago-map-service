@@ -4,7 +4,7 @@ let allBunkers = [];
 let allFilterOptions = { districts: [], wasteTypes: [], contractors: [] };
 let allBunkersUnfiltered = [];
 // Страница карты доступна только после авторизации (проверка в index.php)
-let isAuthed = true;
+let isReadonly = window.READONLY_USER === true;
 
 const DEFAULT_CENTER = [58.6035, 49.6668];
 const DEFAULT_ZOOM = 13;
@@ -129,7 +129,7 @@ function renderMarkers() {
       {
         preset: 'islands#dotIcon',
         iconColor: color,
-        draggable: isAuthed
+        draggable: !isReadonly
       }
     );
 
@@ -156,6 +156,7 @@ function renderMarkers() {
         renderList();
       }).catch(function (err) {
       if (err.message === 'auth_required') window.location.href = '/login';
+      else if (err.message === 'readonly') alert('Доступ только для чтения');
       else console.error('Ошибка обновления координат:', err);
     });
     });
@@ -206,7 +207,7 @@ function buildBalloonBody(b) {
 }
 
 function buildBalloonFooter(b) {
-  if (!isAuthed) return '';
+  if (isReadonly) return '';
   return '' +
     '<div class="balloon-content">' +
       '<div class="balloon-actions">' +
@@ -396,6 +397,10 @@ async function deleteBunker(id) {
       window.location.href = '/login';
       return;
     }
+    if (err.message === 'readonly') {
+      alert('Доступ только для чтения');
+      return;
+    }
     console.error('Ошибка удаления:', err);
     alert('Не удалось удалить бункер');
   }
@@ -466,6 +471,10 @@ async function handleFormSubmit(e) {
   } catch (err) {
     if (err.message === 'auth_required') {
       window.location.href = '/login';
+      return;
+    }
+    if (err.message === 'readonly') {
+      alert('Доступ только для чтения');
       return;
     }
     console.error('Ошибка сохранения:', err);
