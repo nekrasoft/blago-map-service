@@ -41,6 +41,25 @@ function writeBunkers($file, $bunkers) {
     file_put_contents($file, json_encode($bunkers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 }
 
+function normalizeAddress($address) {
+    if (!is_string($address)) {
+        return '';
+    }
+
+    $normalized = trim($address);
+    if ($normalized === '') {
+        return '';
+    }
+
+    // Удаляем сегмент вида ", микрорайон ...", чтобы адреса не дублировались при группировке.
+    $normalized = preg_replace('/\s*,\s*(?:микрорайон|мкр\.?)\s+[^,]+/iu', '', $normalized);
+    $normalized = preg_replace('/\s*,\s*,+/u', ',', $normalized);
+    $normalized = preg_replace('/\s*,\s*/u', ', ', $normalized);
+    $normalized = preg_replace('/\s{2,}/u', ' ', $normalized);
+
+    return trim($normalized, " \t\n\r\0\x0B,");
+}
+
 function getRequestBody() {
     return json_decode(file_get_contents('php://input'), true) ?: [];
 }
@@ -147,6 +166,12 @@ if ($route === 'bunkers') {
     // GET /api/bunkers — список с фильтрацией
     if ($method === 'GET' && !$id) {
         $bunkers = readBunkers($dataFile);
+        $bunkers = array_map(function ($b) {
+            if (array_key_exists('address', $b)) {
+                $b['address'] = normalizeAddress($b['address']);
+            }
+            return $b;
+        }, $bunkers);
 
         if (!empty($_GET['district'])) {
             $district = $_GET['district'];
@@ -180,7 +205,7 @@ if ($route === 'bunkers') {
             'id'             => generateId(),
             'number'         => $body['number'] ?? count($bunkers) + 1,
             'volume'         => $body['volume'] ?? 8,
-            'address'        => $body['address'] ?? '',
+            'address'        => normalizeAddress($body['address'] ?? ''),
             'district'       => $body['district'] ?? '',
             'contractor'     => $body['contractor'] ?? '',
             'wasteType'      => $body['wasteType'] ?? 'КГО',
@@ -200,6 +225,9 @@ if ($route === 'bunkers') {
     if ($method === 'PUT' && $id) {
         requireWriteAuth($config);
         $body = getRequestBody();
+        if (array_key_exists('address', $body)) {
+            $body['address'] = normalizeAddress($body['address']);
+        }
         $bunkers = readBunkers($dataFile);
         $index = null;
 
