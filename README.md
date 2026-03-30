@@ -10,31 +10,41 @@
 - Геокодирование адреса из формы редактирования (Enter в поле «Адрес»)
 - Фильтрация по району, типу мусора и контрагенту (с количеством)
 - Добавление, редактирование и удаление бункеров
-- Хранение данных в JSON-файле
+- Хранение данных в MySQL
 
 ## Стек
 
 - **Бэкенд:** PHP (единственный файл `api.php`)
 - **Фронтенд:** Vanilla JS + Яндекс.Карты API 2.1
-- **БД:** `data/bunkers.json`
+- **БД:** MySQL (`bunkers`)
 
 ## Установка на хостинг (Beget, поддомен map.blagokirov.ru)
 
 1. Создайте поддомен `map.site.ru` в панели вашего хостера
 2. Загрузите файлы в `public_html` поддомена
-3. Скопируйте `config.example.php` в `config.php`:
+3. Скопируйте `.env.example` в `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Если `config.php` отсутствует, создайте его из примера:
    ```bash
    cp config.example.php config.php
    ```
-4. Укажите API-ключ Яндекс.Карт в `config.php`:
-   ```php
-   return [
-       'yandexMapsApiKey' => 'ваш_ключ',
-   ];
+5. Создайте базу и пользователя MySQL:
+   ```sql
+   CREATE DATABASE map_service CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'map_service'@'localhost' IDENTIFIED BY '...';
+   GRANT ALL ON map_service.* TO 'map_service'@'localhost';
    ```
-5. Убедитесь, что папка `data/` доступна для записи:
+6. Заполните в `.env`:
+   - `YANDEX_MAPS_API_KEY`
+   - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
+   - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
+7. При первом запуске API:
+   - автоматически создаст таблицу `bunkers`;
+   - автоматически импортирует данные из `data/bunkers.json`, если таблица пуста.
+8. Если нужен legacy-источник для первого запуска, оставьте `data/bunkers.json` рядом с проектом.
    ```bash
-   chmod 755 data/
    chmod 644 data/bunkers.json
    ```
 
@@ -54,10 +64,10 @@
 map-service/
   .htaccess              — URL-rewriting для /api/*
   index.html             — главная страница
-  api.php                — REST API (PHP)
-  config.php             — настройки (API-ключ, gitignored)
-  config.example.php     — пример настроек
-  data/bunkers.json      — данные бункеров
+  api.php                — REST API (PHP + MySQL)
+  config.php             — настройки авторизации (читает env)
+  config.example.php     — пример настроек авторизации
+  data/bunkers.json      — legacy-данные для одноразового импорта
   css/styles.css         — стили
   js/api.js              — обёртка над REST API
   js/app.js              — логика карты и интерфейса
