@@ -42,4 +42,8 @@ return [
 
     // API-ключ для бота отчётов (запись fillLevel без сессии)
     'botApiKey' => getenv('MAP_BOT_API_KEY') ?: '',
+
+    // Интеграция с MAX (опционально): уведомление в чат заявок при mark-filled
+    'maxBotToken' => getenv('MAX_BOT_TOKEN') ?: '',
+    'maxRequestChatId' => getenv('MAX_REQUEST_CHAT_ID') ?: '',
 ];

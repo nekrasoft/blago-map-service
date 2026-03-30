@@ -238,6 +238,125 @@ function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId)
     }
 }
 
+function summarizeHttpBodyForLog($body, $limit = 300)
+{
+    $body = trim((string) $body);
+    if ($body === '') {
+        return '';
+    }
+    if (strlen($body) <= $limit) {
+        return $body;
+    }
+    return substr($body, 0, $limit) . '...';
+}
+
+function buildMaxMarkFilledMessage($bunker, $filledBy)
+{
+    $number = (int) ($bunker['number'] ?? 0);
+    $numberLabel = $number > 0 ? ('№' . $number) : 'б/н';
+    $contractor = trim((string) ($bunker['contractor'] ?? ''));
+    $address = trim((string) ($bunker['address'] ?? ''));
+    $district = trim((string) ($bunker['district'] ?? ''));
+    $actor = trim((string) $filledBy);
+    $location = $district !== '' ? $district : ($address !== '' ? $address : '—');
+    $bunkerLine = ($contractor !== '' ? $contractor : '—') . ' — ' . $numberLabel . ', ' . $location;
+
+    $lines = [
+        '✅ Заявка принята: бункер заполнен',
+        $bunkerLine,
+        'Отметил: ' . ($actor !== '' ? $actor : '—'),
+        'Время: ' . date('d.m.Y H:i'),
+    ];
+
+    return implode("\n", $lines);
+}
+
+function sendMaxChatMessage($config, $text)
+{
+    $token = trim((string) ($config['maxBotToken'] ?? ''));
+    $chatIdRaw = trim((string) ($config['maxRequestChatId'] ?? ''));
+
+    if ($token === '' || $chatIdRaw === '' || !preg_match('/^-?\d+$/', $chatIdRaw) || $chatIdRaw === '0') {
+        return ['enabled' => false, 'sent' => false];
+    }
+
+    $url = 'https://platform-api.max.ru/messages?chat_id=' . rawurlencode($chatIdRaw);
+    $payload = json_encode(
+        ['text' => (string) $text, 'notify' => true],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+
+    if ($payload === false) {
+        writeAppLog('warning', 'max_message_encode_failed');
+        return ['enabled' => true, 'sent' => false];
+    }
+
+    $statusCode = 0;
+    $responseBody = '';
+
+    try {
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_HTTPHEADER => [
+                    'Authorization: ' . $token,
+                    'Content-Type: application/json',
+                ],
+                CURLOPT_POSTFIELDS => $payload,
+            ]);
+
+            $response = curl_exec($ch);
+            $statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($response === false) {
+                writeAppLog('warning', 'max_message_send_failed', ['error' => $curlError]);
+                return ['enabled' => true, 'sent' => false];
+            }
+            $responseBody = (string) $response;
+        } else {
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'POST',
+                    'header' => "Authorization: {$token}\r\nContent-Type: application/json\r\n",
+                    'content' => $payload,
+                    'timeout' => 10,
+                    'ignore_errors' => true,
+                ],
+            ]);
+
+            $response = @file_get_contents($url, false, $context);
+            $responseBody = $response !== false ? (string) $response : '';
+
+            if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
+                $statusCode = (int) $m[1];
+            }
+
+            if ($response === false && $statusCode === 0) {
+                writeAppLog('warning', 'max_message_send_failed', ['error' => 'file_get_contents_failed']);
+                return ['enabled' => true, 'sent' => false];
+            }
+        }
+    } catch (Throwable $e) {
+        logThrowable('max_message_send_failed_exception', $e);
+        return ['enabled' => true, 'sent' => false];
+    }
+
+    $sent = $statusCode >= 200 && $statusCode < 300;
+    if (!$sent) {
+        writeAppLog('warning', 'max_message_send_http_failed', [
+            'statusCode' => $statusCode,
+            'responseBody' => summarizeHttpBodyForLog($responseBody),
+        ]);
+    }
+
+    return ['enabled' => true, 'sent' => $sent, 'statusCode' => $statusCode];
+}
+
 function getMysqlConnection()
 {
     static $pdo = null;
@@ -1081,6 +1200,12 @@ if ($route === 'bunkers') {
             $updated = markBunkerFilled($pdo, $id, $filledBy, 100);
             if (!$updated) {
                 jsonResponse(['error' => 'Бункер не найден'], 404);
+            }
+
+            $maxMessage = buildMaxMarkFilledMessage($updated, $filledBy);
+            $maxResult = sendMaxChatMessage($config, $maxMessage);
+            if (!empty($maxResult['enabled'])) {
+                $updated['maxNotificationSent'] = !empty($maxResult['sent']);
             }
 
             jsonResponse($updated);

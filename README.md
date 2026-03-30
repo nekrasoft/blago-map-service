@@ -11,6 +11,7 @@
 - Фильтрация по району, типу мусора и контрагенту (с количеством)
 - Добавление, редактирование и удаление бункеров
 - Роль контрагента: пользователь видит только свои бункеры и может отметить бункер заполненным прямо из балуна
+- Интеграция с MAX: при `mark-filled` можно отправлять уведомление в чат заявок
 - Хранение данных в MySQL
 
 ## Стек
@@ -44,6 +45,7 @@
    - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
    - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
    - `COUNTERPARTY_USERS_JSON` (опционально, учётки прорабов/мастеров)
+   - `MAX_BOT_TOKEN`, `MAX_REQUEST_CHAT_ID` (опционально, уведомления в чат MAX)
 7. При первом запуске API:
    - автоматически создаст таблицу `bunkers`;
    - автоматически импортирует данные из `data/bunkers.json`, если таблица пуста.
@@ -60,7 +62,7 @@
 | GET    | /api/counterparties | Справочник контрагентов (`id`, `shortName`, `name`, `schedule`) |
 | GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...&counterpartyId=...) |
 | POST   | /api/bunkers        | Создание бункера                                              |
-| POST   | /api/bunkers/:id/mark-filled | Отметить бункер заполненным (fillLevel=100, сохраняет кто/когда) |
+| POST   | /api/bunkers/:id/mark-filled | Отметить бункер заполненным (fillLevel=100, сохраняет кто/когда, отправляет MAX-уведомление при настройке) |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |
 | DELETE | /api/bunkers/:id    | Удаление бункера                                              |
 
