@@ -537,7 +537,9 @@ if ($route === 'bunkers') {
                 'port' => getenv('MYSQL_PORT') ?: '3306',
                 'user' => getenv('MYSQL_USER') ?: 'map_service',
                 'database' => getenv('MYSQL_DATABASE') ?: 'map_service',
+                'passwordLength' => strlen((string) (getenv('MYSQL_PASSWORD') ?: '')),
             ],
+            'pdoDrivers' => class_exists('PDO') ? PDO::getAvailableDrivers() : [],
         ]);
         if (strpos($e->getMessage(), 'PDO MySQL driver is not installed') !== false || strpos($e->getMessage(), 'could not find driver') !== false) {
             jsonResponse(['error' => 'Не удалось подключиться к MySQL: в PHP не включен драйвер pdo_mysql'], 500);
