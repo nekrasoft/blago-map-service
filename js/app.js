@@ -6,6 +6,12 @@ let allBunkersUnfiltered = [];
 let availableCounterparties = [];
 // Страница карты доступна только после авторизации (проверка в index.php)
 let isReadonly = window.READONLY_USER === true;
+let isCounterpartyUser = window.COUNTERPARTY_USER === true;
+let counterpartyIdScope = window.COUNTERPARTY_ID != null ? Number(window.COUNTERPARTY_ID) : null;
+if (!Number.isInteger(counterpartyIdScope) || counterpartyIdScope <= 0) {
+  counterpartyIdScope = null;
+}
+let canManageBunkers = !isReadonly && !isCounterpartyUser;
 
 const DEFAULT_CENTER = [58.6035, 49.6668];
 const DEFAULT_ZOOM = 13;
@@ -28,6 +34,13 @@ function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('ru-RU');
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr);
+  return d.toLocaleString('ru-RU');
 }
 
 function displayNumber(num) {
@@ -70,15 +83,21 @@ function init() {
     controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
   });
 
-  ensureCounterpartiesLoaded().then(function () {
-    populateCounterpartySelect();
-  });
+  if (canManageBunkers) {
+    ensureCounterpartiesLoaded().then(function () {
+      populateCounterpartySelect();
+    });
+  }
   refreshFilterOptions();
   loadBunkers();
   bindEvents();
 }
 
 async function ensureCounterpartiesLoaded() {
+  if (!canManageBunkers) {
+    availableCounterparties = [];
+    return;
+  }
   try {
     const data = await CounterpartyAPI.getAll();
     availableCounterparties = (Array.isArray(data) ? data : [])
@@ -186,11 +205,11 @@ function renderMarkers() {
       {
         preset: 'islands#dotIcon',
         iconColor: color,
-        draggable: !isReadonly
+        draggable: canManageBunkers
       }
     );
 
-    if (!isReadonly) {
+    if (canManageBunkers) {
       pm.events.add('dragend', function () {
         const coords = pm.geometry.getCoordinates();
         ymaps.geocode(coords, { results: 1 }).then(function (res) {
@@ -215,6 +234,7 @@ function renderMarkers() {
         }).catch(function (err) {
         if (err.message === 'auth_required') window.location.href = '/login';
         else if (err.message === 'readonly') alert('Доступ только для чтения');
+        else if (err.message) alert(err.message);
         else console.error('Ошибка обновления координат:', err);
         });
       });
@@ -254,6 +274,10 @@ function buildBalloonBody(b) {
         '<span class="balloon-label">Заполненность:</span>' +
         '<span class="balloon-value"><span class="bunker-fill-badge fill-' + cls + '">' + b.fillLevel + '%</span></span>' +
       '</div>' +
+      ((b.filledAt || b.filledBy) ? '<div class="balloon-row">' +
+        '<span class="balloon-label">Отметка:</span>' +
+        '<span class="balloon-value">' + (b.filledAt ? formatDateTime(b.filledAt) : '—') + (b.filledBy ? ' (' + b.filledBy + ')' : '') + '</span>' +
+      '</div>' : '') +
       '<div class="balloon-row">' +
         '<span class="balloon-label">Последний вывоз:</span>' +
         '<span class="balloon-value">' + formatDate(b.lastPickupDate) + '</span>' +
@@ -267,6 +291,19 @@ function buildBalloonBody(b) {
 
 function buildBalloonFooter(b) {
   if (isReadonly) return '';
+  if (isCounterpartyUser) {
+    if (counterpartyIdScope !== null && Number(b.counterpartyId || 0) !== counterpartyIdScope) {
+      return '';
+    }
+    const isAlreadyFilled = Number(b.fillLevel) >= 100;
+    return '' +
+      '<div class="balloon-content">' +
+        '<div class="balloon-actions">' +
+          '<button class="btn btn-primary" onclick="markBunkerFilled(\'' + b.id + '\')" ' + (isAlreadyFilled ? 'disabled' : '') + '>' + (isAlreadyFilled ? 'Уже заполнен' : 'Отметить заполненным') + '</button>' +
+        '</div>' +
+      '</div>';
+  }
+  if (!canManageBunkers) return '';
   return '' +
     '<div class="balloon-content">' +
       '<div class="balloon-actions">' +
@@ -429,6 +466,10 @@ function closeModal() {
 }
 
 async function openCreateForm() {
+  if (!canManageBunkers) {
+    alert('Недостаточно прав для создания бункера');
+    return;
+  }
   await ensureCounterpartiesLoaded();
   openModal('Добавить бункер');
   populateCounterpartySelect(null, '');
@@ -444,6 +485,10 @@ async function openCreateForm() {
 }
 
 async function editBunker(id) {
+  if (!canManageBunkers) {
+    alert('Недостаточно прав для редактирования бункера');
+    return;
+  }
   const b = allBunkers.find(x => x.id === id);
   if (!b) return;
 
@@ -467,6 +512,10 @@ async function editBunker(id) {
 }
 
 async function deleteBunker(id) {
+  if (!canManageBunkers) {
+    alert('Недостаточно прав для удаления бункера');
+    return;
+  }
   if (!confirm('Удалить этот бункер?')) return;
 
   try {
@@ -484,7 +533,51 @@ async function deleteBunker(id) {
       return;
     }
     console.error('Ошибка удаления:', err);
-    alert('Не удалось удалить бункер');
+    alert(err.message || 'Не удалось удалить бункер');
+  }
+}
+
+async function markBunkerFilled(id) {
+  if (isReadonly) {
+    alert('Доступ только для чтения');
+    return;
+  }
+
+  const bunker = allBunkers.find(x => x.id === id) || allBunkersUnfiltered.find(x => x.id === id);
+  if (!bunker) {
+    alert('Бункер не найден');
+    return;
+  }
+
+  if (isCounterpartyUser && counterpartyIdScope !== null && Number(bunker.counterpartyId || 0) !== counterpartyIdScope) {
+    alert('Нет доступа к этому бункеру');
+    return;
+  }
+
+  if (Number(bunker.fillLevel) >= 100) {
+    return;
+  }
+
+  if (!confirm('Подтвердить, что бункер заполнен?')) {
+    return;
+  }
+
+  try {
+    map.balloon.close();
+    await BunkerAPI.markFilled(id);
+    await refreshFilterOptions();
+    await loadBunkers();
+  } catch (err) {
+    if (err.message === 'auth_required') {
+      window.location.href = '/login';
+      return;
+    }
+    if (err.message === 'readonly') {
+      alert('Доступ только для чтения');
+      return;
+    }
+    console.error('Ошибка отметки заполненности:', err);
+    alert(err.message || 'Не удалось отметить бункер заполненным');
   }
 }
 
@@ -504,6 +597,10 @@ async function geocodeAddress(address) {
 
 async function handleFormSubmit(e) {
   e.preventDefault();
+  if (!canManageBunkers) {
+    alert('Недостаточно прав для изменения бункеров');
+    return;
+  }
 
   const addressInput = document.getElementById('form-address').value.trim();
   let address = addressInput;

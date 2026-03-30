@@ -69,6 +69,40 @@ body.sidebar-hidden .sidebar-toggle {
   color: #555;
 }
 
+.sidebar-auth .auth-user-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sidebar-auth .auth-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sidebar-auth .auth-role.role-admin {
+  background: #e8f0ff;
+  color: #2f4bb6;
+}
+
+.sidebar-auth .auth-role.role-counterparty {
+  background: #e8f8ef;
+  color: #1d7a49;
+}
+
+.sidebar-auth .auth-role.role-readonly {
+  background: #f2f3f5;
+  color: #5c6573;
+}
+
 .sidebar-header {
   padding: 20px;
   display: flex;
@@ -420,6 +454,11 @@ body.sidebar-hidden .sidebar-toggle {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.balloon-content .balloon-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ===== Мобильные устройства ===== */

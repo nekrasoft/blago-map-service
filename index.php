@@ -1,6 +1,21 @@
 <?php
 require __DIR__ . '/auth.inc.php';
 requireMapAuth($config);
+$isReadonlyUser = !empty($_SESSION['readonly']);
+$sessionCounterpartyId = isset($_SESSION['counterparty_id']) ? (int) $_SESSION['counterparty_id'] : null;
+if ($sessionCounterpartyId !== null && $sessionCounterpartyId <= 0) {
+  $sessionCounterpartyId = null;
+}
+$isCounterpartyUser = $sessionCounterpartyId !== null;
+$roleLabel = 'Админ';
+$roleClass = 'role-admin';
+if ($isCounterpartyUser) {
+  $roleLabel = 'Контрагент';
+  $roleClass = 'role-counterparty';
+} elseif ($isReadonlyUser) {
+  $roleLabel = 'Просмотр';
+  $roleClass = 'role-readonly';
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -15,12 +30,15 @@ requireMapAuth($config);
   <!-- Боковая панель -->
   <aside id="sidebar">
     <div class="sidebar-auth">
-      <span id="auth-user" class="auth-user"><?= htmlspecialchars($_SESSION['user'] ?? '') ?></span>
+      <div class="auth-user-wrap">
+        <span id="auth-user" class="auth-user"><?= htmlspecialchars($_SESSION['user'] ?? '') ?></span>
+        <span class="auth-role <?= htmlspecialchars($roleClass) ?>"><?= htmlspecialchars($roleLabel) ?></span>
+      </div>
       <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
     </div>
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>
-      <?php if (empty($_SESSION['readonly'])): ?>
+      <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
       <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
       <?php endif; ?>
     </div>
@@ -112,7 +130,11 @@ requireMapAuth($config);
     </div>
   </div>
 
-  <script>window.READONLY_USER = <?= json_encode(!empty($_SESSION['readonly'])) ?>;</script>
+  <script>
+    window.READONLY_USER = <?= json_encode($isReadonlyUser) ?>;
+    window.COUNTERPARTY_USER = <?= json_encode($isCounterpartyUser) ?>;
+    window.COUNTERPARTY_ID = <?= json_encode($sessionCounterpartyId) ?>;
+  </script>
   <script src="/js/api.js?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/js/api.js') ?>"></script>
   <script src="/js/app.js?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/js/app.js') ?>"></script>
 </body>

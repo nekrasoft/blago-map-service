@@ -30,7 +30,14 @@ $config = file_exists($configFile) ? require $configFile : [];
 // --- Маршрутизация ---
 $method = $_SERVER['REQUEST_METHOD'];
 $route = isset($_GET['route']) ? trim($_GET['route'], '/') : '';
-$id = isset($_GET['id']) ? $_GET['id'] : null;
+$id = null;
+$idAction = null;
+$rawId = isset($_GET['id']) ? trim((string) $_GET['id']) : '';
+if ($rawId !== '') {
+    $parts = explode('/', trim($rawId, '/'));
+    $id = $parts[0] ?? null;
+    $idAction = isset($parts[1]) ? trim((string) $parts[1]) : null;
+}
 
 // --- Утилиты ---
 function readLegacyBunkers($file)
@@ -142,6 +149,41 @@ function isAuthed($config)
     return isset($_SESSION['user']);
 }
 
+function getCounterpartyAccessMap($config)
+{
+    $map = $config['counterpartyAccess'] ?? [];
+    if (!is_array($map)) {
+        return [];
+    }
+
+    $normalized = [];
+    foreach ($map as $login => $counterpartyId) {
+        $login = trim((string) $login);
+        $counterpartyId = (int) $counterpartyId;
+        if ($login === '' || $counterpartyId <= 0) {
+            continue;
+        }
+        $normalized[$login] = $counterpartyId;
+    }
+
+    return $normalized;
+}
+
+function getSessionCounterpartyId()
+{
+    $counterpartyId = $_SESSION['counterparty_id'] ?? null;
+    if ($counterpartyId === null || $counterpartyId === '') {
+        return null;
+    }
+
+    $counterpartyId = (int) $counterpartyId;
+    if ($counterpartyId <= 0) {
+        return null;
+    }
+
+    return $counterpartyId;
+}
+
 /** Проверка API-ключа бота (X-API-Key или Authorization: Bearer) — для записи без сессии */
 function isBotAuthed($config)
 {
@@ -167,7 +209,7 @@ function requireAuth($config)
     }
 }
 
-function requireWriteAuth($config)
+function requireWriteAuth($config, $allowCounterpartyUser = false)
 {
     if (isBotAuthed($config)) {
         return; // бот с API-ключом — пропускаем
@@ -175,6 +217,24 @@ function requireWriteAuth($config)
     requireAuth($config);
     if (!empty($_SESSION['readonly'])) {
         jsonResponse(['error' => 'Доступ только для чтения'], 403);
+    }
+    if (!$allowCounterpartyUser && getSessionCounterpartyId() !== null) {
+        jsonResponse(['error' => 'Для этой учётной записи доступно только действие "Отметить заполненным"'], 403);
+    }
+}
+
+function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId)
+{
+    if ($counterpartyId === null) {
+        return;
+    }
+
+    $bunkerCounterpartyId = array_key_exists('counterpartyId', $bunker)
+        ? (int) ($bunker['counterpartyId'] ?? 0)
+        : 0;
+
+    if ($bunkerCounterpartyId <= 0 || $bunkerCounterpartyId !== (int) $counterpartyId) {
+        jsonResponse(['error' => 'Нет доступа к этому бункеру'], 403);
     }
 }
 
@@ -229,6 +289,8 @@ CREATE TABLE IF NOT EXISTS bunkers (
     waste_type VARCHAR(100) NOT NULL DEFAULT 'КГО',
     last_pickup_date VARCHAR(10) NOT NULL DEFAULT '',
     fill_level INT NOT NULL DEFAULT 0,
+    last_filled_at DATETIME NULL,
+    last_filled_by VARCHAR(255) NULL,
     contact_phone VARCHAR(50) NOT NULL DEFAULT '',
     lat DECIMAL(17,14) NOT NULL DEFAULT 0,
     lng DECIMAL(17,14) NOT NULL DEFAULT 0,
@@ -417,6 +479,25 @@ function ensureBunkersCounterpartyRelation($pdo)
     $ensured = true;
 }
 
+function ensureBunkersFillMarkColumns($pdo)
+{
+    static $ensured = false;
+
+    if ($ensured) {
+        return;
+    }
+
+    if (!columnExists($pdo, 'bunkers', 'last_filled_at')) {
+        $pdo->exec('ALTER TABLE bunkers ADD COLUMN last_filled_at DATETIME NULL AFTER fill_level');
+    }
+
+    if (!columnExists($pdo, 'bunkers', 'last_filled_by')) {
+        $pdo->exec('ALTER TABLE bunkers ADD COLUMN last_filled_by VARCHAR(255) NULL AFTER last_filled_at');
+    }
+
+    $ensured = true;
+}
+
 function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
 {
     static $migrated = false;
@@ -473,6 +554,16 @@ function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
 
 function mapBunkerRow($row)
 {
+    $filledAtRaw = $row['filledAt'] ?? null;
+    $filledAt = null;
+    if ($filledAtRaw !== null && $filledAtRaw !== '') {
+        try {
+            $filledAt = (new DateTime((string) $filledAtRaw))->format(DATE_ATOM);
+        } catch (Throwable $e) {
+            $filledAt = (string) $filledAtRaw;
+        }
+    }
+
     return [
         'id' => (string) $row['id'],
         'number' => (int) $row['number'],
@@ -486,6 +577,10 @@ function mapBunkerRow($row)
         'wasteType' => (string) ($row['wasteType'] ?? 'КГО'),
         'lastPickupDate' => (string) ($row['lastPickupDate'] ?? ''),
         'fillLevel' => (int) ($row['fillLevel'] ?? 0),
+        'filledAt' => $filledAt,
+        'filledBy' => array_key_exists('filledBy', $row) && $row['filledBy'] !== null && $row['filledBy'] !== ''
+            ? (string) $row['filledBy']
+            : null,
         'contactPhone' => (string) ($row['contactPhone'] ?? ''),
         'lat' => (float) ($row['lat'] ?? 0),
         'lng' => (float) ($row['lng'] ?? 0),
@@ -501,6 +596,7 @@ function getBunkersDb($legacyFile)
         initBunkersTable($pdo);
         migrateLegacyJsonIfNeeded($pdo, $legacyFile);
         ensureBunkersCounterpartyRelation($pdo);
+        ensureBunkersFillMarkColumns($pdo);
         $ready = true;
     }
 
@@ -514,14 +610,18 @@ function listBunkers($pdo, $filters = [])
         $sql = 'SELECT b.id, b.`number`, b.volume, b.address, b.district,
                        COALESCE(c.short_name, b.contractor, \'\') AS contractor,
                        b.counterparty_id AS counterpartyId,
-                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
+                       b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
+                       b.contact_phone AS contactPhone, b.lat, b.lng
                 FROM bunkers b
                 LEFT JOIN counterparties c ON c.id = b.counterparty_id';
     } else {
         $sql = 'SELECT b.id, b.`number`, b.volume, b.address, b.district,
                        b.contractor AS contractor,
                        b.counterparty_id AS counterpartyId,
-                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
+                       b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
+                       b.contact_phone AS contactPhone, b.lat, b.lng
                 FROM bunkers b';
     }
 
@@ -569,7 +669,9 @@ function getBunkerById($pdo, $id)
             'SELECT b.id, b.`number`, b.volume, b.address, b.district,
                     COALESCE(c.short_name, b.contractor, \'\') AS contractor,
                     b.counterparty_id AS counterpartyId,
-                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
+                    b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
+                    b.contact_phone AS contactPhone, b.lat, b.lng
              FROM bunkers b
              LEFT JOIN counterparties c ON c.id = b.counterparty_id
              WHERE b.id = :id'
@@ -579,7 +681,9 @@ function getBunkerById($pdo, $id)
             'SELECT b.id, b.`number`, b.volume, b.address, b.district,
                     b.contractor AS contractor,
                     b.counterparty_id AS counterpartyId,
-                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
+                    b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
+                    b.contact_phone AS contactPhone, b.lat, b.lng
              FROM bunkers b
              WHERE b.id = :id'
         );
@@ -793,6 +897,31 @@ function updateBunker($pdo, $id, $body)
     return getBunkerById($pdo, $id);
 }
 
+function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
+{
+    $fillLevel = (int) $fillLevel;
+    if ($fillLevel < 0) {
+        $fillLevel = 0;
+    } elseif ($fillLevel > 100) {
+        $fillLevel = 100;
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE bunkers
+         SET fill_level = :fillLevel,
+             last_filled_at = NOW(),
+             last_filled_by = :filledBy
+         WHERE id = :id'
+    );
+    $stmt->execute([
+        'id' => $id,
+        'fillLevel' => $fillLevel,
+        'filledBy' => (string) $filledBy,
+    ]);
+
+    return getBunkerById($pdo, $id);
+}
+
 function deleteBunkerById($pdo, $id)
 {
     $stmt = $pdo->prepare('DELETE FROM bunkers WHERE id = :id');
@@ -811,10 +940,13 @@ if ($route === 'config' && $method === 'GET') {
 
 // GET /api/auth — проверка авторизации
 if ($route === 'auth' && $method === 'GET') {
+    $counterpartyId = getSessionCounterpartyId();
     jsonResponse([
         'authenticated' => isAuthed($config),
         'user' => $_SESSION['user'] ?? null,
         'readonly' => !empty($_SESSION['readonly']),
+        'counterpartyId' => $counterpartyId,
+        'isCounterpartyUser' => $counterpartyId !== null,
     ]);
 }
 
@@ -839,7 +971,24 @@ if ($route === 'login' && $method === 'POST') {
 
     $_SESSION['user'] = $login;
     $_SESSION['readonly'] = in_array($login, $config['readonlyUsers'] ?? [], true);
-    jsonResponse(['user' => $login, 'readonly' => $_SESSION['readonly']]);
+    $counterpartyAccess = getCounterpartyAccessMap($config);
+    $counterpartyId = array_key_exists($login, $counterpartyAccess)
+        ? (int) $counterpartyAccess[$login]
+        : null;
+
+    if ($counterpartyId !== null && $counterpartyId > 0) {
+        $_SESSION['counterparty_id'] = $counterpartyId;
+    } else {
+        unset($_SESSION['counterparty_id']);
+        $counterpartyId = null;
+    }
+
+    jsonResponse([
+        'user' => $login,
+        'readonly' => $_SESSION['readonly'],
+        'counterpartyId' => $counterpartyId,
+        'isCounterpartyUser' => $counterpartyId !== null,
+    ]);
 }
 
 // POST /api/logout — выход
@@ -851,9 +1000,16 @@ if ($route === 'logout' && $method === 'POST') {
 
 // /api/counterparties
 if ($route === 'counterparties' && $method === 'GET') {
+    requireAuth($config);
     try {
         $pdo = getMysqlConnection();
         $items = listCounterparties($pdo);
+        $counterpartyId = getSessionCounterpartyId();
+        if ($counterpartyId !== null) {
+            $items = array_values(array_filter($items, function ($item) use ($counterpartyId) {
+                return (int) ($item['id'] ?? 0) === (int) $counterpartyId;
+            }));
+        }
         jsonResponse($items);
     } catch (Throwable $e) {
         logThrowable('counterparties_get_failed', $e);
@@ -882,19 +1038,58 @@ if ($route === 'bunkers') {
         jsonResponse(['error' => 'Не удалось подключиться к MySQL'], 500);
     }
 
+    $sessionCounterpartyId = getSessionCounterpartyId();
+
     // GET /api/bunkers — список с фильтрацией
     if ($method === 'GET' && !$id) {
+        requireAuth($config);
         try {
-            $bunkers = listBunkers($pdo, [
+            $filters = [
                 'district' => $_GET['district'] ?? '',
                 'wasteType' => $_GET['wasteType'] ?? '',
                 'contractor' => $_GET['contractor'] ?? '',
                 'counterpartyId' => $_GET['counterpartyId'] ?? '',
-            ]);
+            ];
+
+            if ($sessionCounterpartyId !== null) {
+                $filters['counterpartyId'] = $sessionCounterpartyId;
+            }
+
+            $bunkers = listBunkers($pdo, $filters);
             jsonResponse($bunkers);
         } catch (Throwable $e) {
             logThrowable('bunkers_get_failed', $e);
             jsonResponse(['error' => 'Не удалось загрузить бункеры'], 500);
+        }
+    }
+
+    // POST /api/bunkers/:id/mark-filled — отметить заполненным
+    if ($method === 'POST' && $id && $idAction === 'mark-filled') {
+        requireWriteAuth($config, true);
+        try {
+            $bunker = getBunkerById($pdo, $id);
+            if (!$bunker) {
+                jsonResponse(['error' => 'Бункер не найден'], 404);
+            }
+
+            ensureCounterpartyCanAccessBunker($bunker, $sessionCounterpartyId);
+
+            $filledBy = isBotAuthed($config)
+                ? 'bot'
+                : (string) ($_SESSION['user'] ?? 'unknown');
+
+            $updated = markBunkerFilled($pdo, $id, $filledBy, 100);
+            if (!$updated) {
+                jsonResponse(['error' => 'Бункер не найден'], 404);
+            }
+
+            jsonResponse($updated);
+        } catch (Throwable $e) {
+            logThrowable('bunkers_mark_filled_failed', $e, ['bunkerId' => $id]);
+            if ($e instanceof InvalidArgumentException) {
+                jsonResponse(['error' => $e->getMessage()], 400);
+            }
+            jsonResponse(['error' => 'Не удалось отметить бункер заполненным'], 500);
         }
     }
 
@@ -915,7 +1110,7 @@ if ($route === 'bunkers') {
     }
 
     // PUT /api/bunkers/:id — обновление
-    if ($method === 'PUT' && $id) {
+    if ($method === 'PUT' && $id && !$idAction) {
         requireWriteAuth($config);
         try {
             $body = getRequestBody();
@@ -936,7 +1131,7 @@ if ($route === 'bunkers') {
     }
 
     // DELETE /api/bunkers/:id — удаление
-    if ($method === 'DELETE' && $id) {
+    if ($method === 'DELETE' && $id && !$idAction) {
         requireWriteAuth($config);
         try {
             $deleted = deleteBunkerById($pdo, $id);

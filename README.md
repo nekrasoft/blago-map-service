@@ -10,6 +10,7 @@
 - Геокодирование адреса из формы редактирования (Enter в поле «Адрес»)
 - Фильтрация по району, типу мусора и контрагенту (с количеством)
 - Добавление, редактирование и удаление бункеров
+- Роль контрагента: пользователь видит только свои бункеры и может отметить бункер заполненным прямо из балуна
 - Хранение данных в MySQL
 
 ## Стек
@@ -42,6 +43,7 @@
    - `YANDEX_MAPS_API_KEY`
    - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
    - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
+   - `COUNTERPARTY_USERS_JSON` (опционально, учётки прорабов/мастеров)
 7. При первом запуске API:
    - автоматически создаст таблицу `bunkers`;
    - автоматически импортирует данные из `data/bunkers.json`, если таблица пуста.
@@ -58,10 +60,12 @@
 | GET    | /api/counterparties | Справочник контрагентов (`id`, `shortName`, `name`, `schedule`) |
 | GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...&counterpartyId=...) |
 | POST   | /api/bunkers        | Создание бункера                                              |
+| POST   | /api/bunkers/:id/mark-filled | Отметить бункер заполненным (fillLevel=100, сохраняет кто/когда) |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |
 | DELETE | /api/bunkers/:id    | Удаление бункера                                              |
 
 - Для `bunkers` поддерживается `counterpartyId` (FK на `counterparties.id`), при этом поле `contractor` сохранено для обратной совместимости и отдаётся как `short_name` при наличии связи.
+- Для пользователей-контрагентов `GET /api/bunkers` принудительно ограничивается их `counterpartyId`; обычные CRUD-операции недоступны, кроме `mark-filled`.
 
 ## Структура проекта
 

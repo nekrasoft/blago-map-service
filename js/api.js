@@ -66,6 +66,15 @@ const BunkerAPI = {
     if (res.status === 403) throw new Error('readonly');
     if (!res.ok) throw new Error(payload.error || 'Ошибка удаления бункера');
     return payload;
+  },
+
+  async markFilled(id) {
+    const res = await fetch('/api/bunkers/' + id + '/mark-filled', { method: 'POST' });
+    const payload = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('auth_required');
+    if (res.status === 403) throw new Error(payload.error || 'readonly');
+    if (!res.ok) throw new Error(payload.error || 'Не удалось отметить бункер заполненным');
+    return payload;
   }
 };
 
