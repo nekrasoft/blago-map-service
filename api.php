@@ -259,11 +259,13 @@ function buildMaxMarkFilledMessage($bunker, $filledBy)
     $district = trim((string) ($bunker['district'] ?? ''));
     $actor = trim((string) $filledBy);
     $location = $district !== '' ? $district : ($address !== '' ? $address : '—');
-    $bunkerLine = ($contractor !== '' ? $contractor : '—') . ' — ' . $numberLabel . ', ' . $location;
+    $bunkerLine = ($contractor !== '' ? '• ' . $contractor : '—') . ' — ' . $numberLabel . ', ' . $location;
 
     $lines = [
         '✅ Заявка принята: бункер заполнен',
+        '',
         $bunkerLine,
+        '',
         'Отметил: ' . ($actor !== '' ? $actor : '—'),
         'Время: ' . date('d.m.Y H:i'),
     ];
