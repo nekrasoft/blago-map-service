@@ -239,7 +239,8 @@ CREATE TABLE IF NOT EXISTS bunkers (
     KEY idx_bunkers_district (district),
     KEY idx_bunkers_waste_type (waste_type),
     KEY idx_bunkers_contractor (contractor),
-    KEY idx_bunkers_counterparty_id (counterparty_id)
+    KEY idx_bunkers_counterparty_id (counterparty_id),
+    KEY idx_bunkers_counterparty_number (counterparty_id, `number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 
@@ -371,6 +372,9 @@ function ensureBunkersCounterpartyRelation($pdo)
 
     if (!indexExists($pdo, 'bunkers', 'idx_bunkers_counterparty_id')) {
         $pdo->exec('ALTER TABLE bunkers ADD INDEX idx_bunkers_counterparty_id (counterparty_id)');
+    }
+    if (!indexExists($pdo, 'bunkers', 'idx_bunkers_counterparty_number')) {
+        $pdo->exec('ALTER TABLE bunkers ADD INDEX idx_bunkers_counterparty_number (counterparty_id, `number`)');
     }
 
     if (!counterpartiesTableExists($pdo)) {
@@ -548,7 +552,7 @@ function listBunkers($pdo, $filters = [])
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY b.`number` ASC, b.id ASC';
+    $sql .= ' ORDER BY b.counterparty_id ASC, b.`number` ASC, b.id ASC';
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
