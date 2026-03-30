@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS bunkers (
     address VARCHAR(255) NOT NULL DEFAULT '',
     district VARCHAR(255) NOT NULL DEFAULT '',
     contractor VARCHAR(255) NOT NULL DEFAULT '',
+    counterparty_id INT NULL,
     waste_type VARCHAR(100) NOT NULL DEFAULT 'КГО',
     last_pickup_date VARCHAR(10) NOT NULL DEFAULT '',
     fill_level INT NOT NULL DEFAULT 0,
@@ -237,12 +238,179 @@ CREATE TABLE IF NOT EXISTS bunkers (
     KEY idx_bunkers_number (`number`),
     KEY idx_bunkers_district (district),
     KEY idx_bunkers_waste_type (waste_type),
-    KEY idx_bunkers_contractor (contractor)
+    KEY idx_bunkers_contractor (contractor),
+    KEY idx_bunkers_counterparty_id (counterparty_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 
     $pdo->exec($sql);
     $initialized = true;
+}
+
+function tableExists($pdo, $tableName)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE() AND table_name = :tableName'
+    );
+    $stmt->execute(['tableName' => $tableName]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function columnExists($pdo, $tableName, $columnName)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :tableName
+           AND column_name = :columnName'
+    );
+    $stmt->execute([
+        'tableName' => $tableName,
+        'columnName' => $columnName,
+    ]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function indexExists($pdo, $tableName, $indexName)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.statistics
+         WHERE table_schema = DATABASE()
+           AND table_name = :tableName
+           AND index_name = :indexName'
+    );
+    $stmt->execute([
+        'tableName' => $tableName,
+        'indexName' => $indexName,
+    ]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function hasCounterpartyForeignKey($pdo)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.key_column_usage
+         WHERE table_schema = DATABASE()
+           AND table_name = :tableName
+           AND column_name = :columnName
+           AND referenced_table_name = :referencedTable'
+    );
+    $stmt->execute([
+        'tableName' => 'bunkers',
+        'columnName' => 'counterparty_id',
+        'referencedTable' => 'counterparties',
+    ]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function counterpartiesTableExists($pdo)
+{
+    static $exists = null;
+    if ($exists !== null) {
+        return $exists;
+    }
+    $exists = tableExists($pdo, 'counterparties');
+    return $exists;
+}
+
+function findCounterpartyIdByShortName($pdo, $shortName)
+{
+    if (!counterpartiesTableExists($pdo)) {
+        return null;
+    }
+
+    $shortName = trim((string) $shortName);
+    if ($shortName === '') {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT id FROM counterparties WHERE short_name = :shortName LIMIT 1');
+    $stmt->execute(['shortName' => $shortName]);
+    $id = $stmt->fetchColumn();
+
+    if ($id === false) {
+        return null;
+    }
+
+    return (int) $id;
+}
+
+function findCounterpartyShortNameById($pdo, $counterpartyId)
+{
+    if (!counterpartiesTableExists($pdo)) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT short_name FROM counterparties WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => (int) $counterpartyId]);
+    $shortName = $stmt->fetchColumn();
+
+    if ($shortName === false) {
+        return null;
+    }
+
+    return (string) $shortName;
+}
+
+function ensureBunkersCounterpartyRelation($pdo)
+{
+    static $ensured = false;
+
+    if ($ensured) {
+        return;
+    }
+
+    if (!columnExists($pdo, 'bunkers', 'counterparty_id')) {
+        $pdo->exec('ALTER TABLE bunkers ADD COLUMN counterparty_id INT NULL AFTER contractor');
+    }
+
+    if (!indexExists($pdo, 'bunkers', 'idx_bunkers_counterparty_id')) {
+        $pdo->exec('ALTER TABLE bunkers ADD INDEX idx_bunkers_counterparty_id (counterparty_id)');
+    }
+
+    if (!counterpartiesTableExists($pdo)) {
+        writeAppLog('warning', 'counterparties_table_missing_for_bunkers_relation');
+        $ensured = true;
+        return;
+    }
+
+    // Автопривязка существующих строк из старого contractor -> counterparties.short_name
+    $pdo->exec(
+        'UPDATE bunkers b
+         JOIN counterparties c ON c.short_name = b.contractor
+         SET b.counterparty_id = c.id
+         WHERE b.counterparty_id IS NULL
+           AND b.contractor <> \'\''
+    );
+
+    if (!hasCounterpartyForeignKey($pdo)) {
+        $orphans = (int) $pdo->query(
+            'SELECT COUNT(*)
+             FROM bunkers b
+             LEFT JOIN counterparties c ON c.id = b.counterparty_id
+             WHERE b.counterparty_id IS NOT NULL
+               AND c.id IS NULL'
+        )->fetchColumn();
+
+        if ($orphans === 0) {
+            $pdo->exec(
+                'ALTER TABLE bunkers
+                 ADD CONSTRAINT fk_bunkers_counterparty_id
+                 FOREIGN KEY (counterparty_id) REFERENCES counterparties(id)
+                 ON DELETE SET NULL
+                 ON UPDATE CASCADE'
+            );
+        } else {
+            writeAppLog('warning', 'bunkers_counterparty_fk_skipped_orphans', ['orphans' => $orphans]);
+        }
+    }
+
+    $ensured = true;
 }
 
 function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
@@ -308,6 +476,9 @@ function mapBunkerRow($row)
         'address' => normalizeAddress($row['address'] ?? ''),
         'district' => (string) ($row['district'] ?? ''),
         'contractor' => (string) ($row['contractor'] ?? ''),
+        'counterpartyId' => array_key_exists('counterpartyId', $row) && $row['counterpartyId'] !== null
+            ? (int) $row['counterpartyId']
+            : null,
         'wasteType' => (string) ($row['wasteType'] ?? 'КГО'),
         'lastPickupDate' => (string) ($row['lastPickupDate'] ?? ''),
         'fillLevel' => (int) ($row['fillLevel'] ?? 0),
@@ -325,6 +496,7 @@ function getBunkersDb($legacyFile)
     if (!$ready) {
         initBunkersTable($pdo);
         migrateLegacyJsonIfNeeded($pdo, $legacyFile);
+        ensureBunkersCounterpartyRelation($pdo);
         $ready = true;
     }
 
@@ -333,29 +505,50 @@ function getBunkersDb($legacyFile)
 
 function listBunkers($pdo, $filters = [])
 {
-    $sql = 'SELECT id, `number`, volume, address, district, contractor, waste_type AS wasteType, last_pickup_date AS lastPickupDate, fill_level AS fillLevel, contact_phone AS contactPhone, lat, lng
-            FROM bunkers';
+    $hasCounterparties = counterpartiesTableExists($pdo);
+    if ($hasCounterparties) {
+        $sql = 'SELECT b.id, b.`number`, b.volume, b.address, b.district,
+                       COALESCE(c.short_name, b.contractor, \'\') AS contractor,
+                       b.counterparty_id AS counterpartyId,
+                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                FROM bunkers b
+                LEFT JOIN counterparties c ON c.id = b.counterparty_id';
+    } else {
+        $sql = 'SELECT b.id, b.`number`, b.volume, b.address, b.district,
+                       b.contractor AS contractor,
+                       b.counterparty_id AS counterpartyId,
+                       b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+                FROM bunkers b';
+    }
 
     $where = [];
     $params = [];
 
     if (!empty($filters['district'])) {
-        $where[] = 'district = :district';
+        $where[] = 'b.district = :district';
         $params['district'] = $filters['district'];
     }
     if (!empty($filters['wasteType'])) {
-        $where[] = 'waste_type = :wasteType';
+        $where[] = 'b.waste_type = :wasteType';
         $params['wasteType'] = $filters['wasteType'];
     }
     if (!empty($filters['contractor'])) {
-        $where[] = 'contractor = :contractor';
+        if ($hasCounterparties) {
+            $where[] = 'COALESCE(c.short_name, b.contractor, \'\') = :contractor';
+        } else {
+            $where[] = 'b.contractor = :contractor';
+        }
         $params['contractor'] = $filters['contractor'];
+    }
+    if (array_key_exists('counterpartyId', $filters) && $filters['counterpartyId'] !== '' && $filters['counterpartyId'] !== null) {
+        $where[] = 'b.counterparty_id = :counterpartyId';
+        $params['counterpartyId'] = (int) $filters['counterpartyId'];
     }
 
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY `number` ASC, id ASC';
+    $sql .= ' ORDER BY b.`number` ASC, b.id ASC';
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -366,11 +559,27 @@ function listBunkers($pdo, $filters = [])
 
 function getBunkerById($pdo, $id)
 {
-    $stmt = $pdo->prepare(
-        'SELECT id, `number`, volume, address, district, contractor, waste_type AS wasteType, last_pickup_date AS lastPickupDate, fill_level AS fillLevel, contact_phone AS contactPhone, lat, lng
-         FROM bunkers
-         WHERE id = :id'
-    );
+    $hasCounterparties = counterpartiesTableExists($pdo);
+    if ($hasCounterparties) {
+        $stmt = $pdo->prepare(
+            'SELECT b.id, b.`number`, b.volume, b.address, b.district,
+                    COALESCE(c.short_name, b.contractor, \'\') AS contractor,
+                    b.counterparty_id AS counterpartyId,
+                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+             FROM bunkers b
+             LEFT JOIN counterparties c ON c.id = b.counterparty_id
+             WHERE b.id = :id'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'SELECT b.id, b.`number`, b.volume, b.address, b.district,
+                    b.contractor AS contractor,
+                    b.counterparty_id AS counterpartyId,
+                    b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel, b.contact_phone AS contactPhone, b.lat, b.lng
+             FROM bunkers b
+             WHERE b.id = :id'
+        );
+    }
     $stmt->execute(['id' => $id]);
     $row = $stmt->fetch();
 
@@ -384,13 +593,41 @@ function getBunkerById($pdo, $id)
 function createBunker($pdo, $body)
 {
     $nextNumber = (int) $pdo->query('SELECT COUNT(*) FROM bunkers')->fetchColumn() + 1;
+    $contractor = trim((string) ($body['contractor'] ?? ''));
+    $counterpartyId = null;
+
+    if (array_key_exists('counterpartyId', $body) && $body['counterpartyId'] !== '' && $body['counterpartyId'] !== null) {
+        if (!counterpartiesTableExists($pdo)) {
+            throw new InvalidArgumentException('Таблица counterparties не найдена');
+        }
+        $counterpartyId = (int) $body['counterpartyId'];
+        if ($counterpartyId <= 0) {
+            throw new InvalidArgumentException('Некорректный counterpartyId');
+        }
+        $shortName = findCounterpartyShortNameById($pdo, $counterpartyId);
+        if ($shortName === null) {
+            throw new InvalidArgumentException('Контрагент не найден');
+        }
+        $contractor = $shortName;
+    } elseif ($contractor !== '') {
+        $resolvedCounterpartyId = findCounterpartyIdByShortName($pdo, $contractor);
+        if ($resolvedCounterpartyId !== null) {
+            $counterpartyId = $resolvedCounterpartyId;
+            $resolvedShortName = findCounterpartyShortNameById($pdo, $resolvedCounterpartyId);
+            if ($resolvedShortName !== null) {
+                $contractor = $resolvedShortName;
+            }
+        }
+    }
+
     $newBunker = [
         'id' => generateId(),
         'number' => array_key_exists('number', $body) ? (int) $body['number'] : $nextNumber,
         'volume' => array_key_exists('volume', $body) ? (float) $body['volume'] : 8,
         'address' => normalizeAddress($body['address'] ?? ''),
         'district' => (string) ($body['district'] ?? ''),
-        'contractor' => (string) ($body['contractor'] ?? ''),
+        'contractor' => $contractor,
+        'counterpartyId' => $counterpartyId,
         'wasteType' => (string) ($body['wasteType'] ?? 'КГО'),
         'lastPickupDate' => (string) ($body['lastPickupDate'] ?? date('Y-m-d')),
         'fillLevel' => array_key_exists('fillLevel', $body) ? (int) $body['fillLevel'] : 0,
@@ -400,8 +637,8 @@ function createBunker($pdo, $body)
     ];
 
     $stmt = $pdo->prepare(
-        'INSERT INTO bunkers (id, `number`, volume, address, district, contractor, waste_type, last_pickup_date, fill_level, contact_phone, lat, lng)
-         VALUES (:id, :number, :volume, :address, :district, :contractor, :wasteType, :lastPickupDate, :fillLevel, :contactPhone, :lat, :lng)'
+        'INSERT INTO bunkers (id, `number`, volume, address, district, contractor, counterparty_id, waste_type, last_pickup_date, fill_level, contact_phone, lat, lng)
+         VALUES (:id, :number, :volume, :address, :district, :contractor, :counterpartyId, :wasteType, :lastPickupDate, :fillLevel, :contactPhone, :lat, :lng)'
     );
 
     $stmt->execute([
@@ -411,6 +648,7 @@ function createBunker($pdo, $body)
         'address' => $newBunker['address'],
         'district' => $newBunker['district'],
         'contractor' => $newBunker['contractor'],
+        'counterpartyId' => $newBunker['counterpartyId'],
         'wasteType' => $newBunker['wasteType'],
         'lastPickupDate' => $newBunker['lastPickupDate'],
         'fillLevel' => $newBunker['fillLevel'],
@@ -419,7 +657,8 @@ function createBunker($pdo, $body)
         'lng' => $newBunker['lng'],
     ]);
 
-    return $newBunker;
+    $created = getBunkerById($pdo, $newBunker['id']);
+    return $created ?: $newBunker;
 }
 
 function updateBunker($pdo, $id, $body)
@@ -429,7 +668,6 @@ function updateBunker($pdo, $id, $body)
         'volume' => ['column' => 'volume', 'type' => 'float'],
         'address' => ['column' => 'address', 'type' => 'address'],
         'district' => ['column' => 'district', 'type' => 'string'],
-        'contractor' => ['column' => 'contractor', 'type' => 'string'],
         'wasteType' => ['column' => 'waste_type', 'type' => 'string'],
         'lastPickupDate' => ['column' => 'last_pickup_date', 'type' => 'string'],
         'fillLevel' => ['column' => 'fill_level', 'type' => 'int'],
@@ -459,6 +697,57 @@ function updateBunker($pdo, $id, $body)
 
         $set[] = $meta['column'] . ' = :' . $apiField;
         $params[$apiField] = $value;
+    }
+
+    $hasCounterpartyId = array_key_exists('counterpartyId', $body);
+    $hasContractor = array_key_exists('contractor', $body);
+
+    if ($hasCounterpartyId) {
+        $rawCounterpartyId = $body['counterpartyId'];
+        if ($rawCounterpartyId === '' || $rawCounterpartyId === null) {
+            $set[] = 'counterparty_id = NULL';
+            if ($hasContractor) {
+                $contractorValue = trim((string) $body['contractor']);
+                $set[] = 'contractor = :contractor';
+                $params['contractor'] = $contractorValue;
+            }
+        } else {
+            if (!counterpartiesTableExists($pdo)) {
+                throw new InvalidArgumentException('Таблица counterparties не найдена');
+            }
+            $counterpartyId = (int) $rawCounterpartyId;
+            if ($counterpartyId <= 0) {
+                throw new InvalidArgumentException('Некорректный counterpartyId');
+            }
+            $shortName = findCounterpartyShortNameById($pdo, $counterpartyId);
+            if ($shortName === null) {
+                throw new InvalidArgumentException('Контрагент не найден');
+            }
+            $set[] = 'counterparty_id = :counterpartyId';
+            $params['counterpartyId'] = $counterpartyId;
+            $set[] = 'contractor = :contractor';
+            $params['contractor'] = $shortName;
+        }
+    } elseif ($hasContractor) {
+        $contractorValue = trim((string) $body['contractor']);
+        $set[] = 'contractor = :contractor';
+        $params['contractor'] = $contractorValue;
+
+        if ($contractorValue === '') {
+            $set[] = 'counterparty_id = NULL';
+        } else {
+            $resolvedCounterpartyId = findCounterpartyIdByShortName($pdo, $contractorValue);
+            if ($resolvedCounterpartyId !== null) {
+                $resolvedShortName = findCounterpartyShortNameById($pdo, $resolvedCounterpartyId);
+                $set[] = 'counterparty_id = :resolvedCounterpartyId';
+                $params['resolvedCounterpartyId'] = $resolvedCounterpartyId;
+                if ($resolvedShortName !== null) {
+                    $params['contractor'] = $resolvedShortName;
+                }
+            } else {
+                $set[] = 'counterparty_id = NULL';
+            }
+        }
     }
 
     if ($set) {
@@ -554,6 +843,7 @@ if ($route === 'bunkers') {
                 'district' => $_GET['district'] ?? '',
                 'wasteType' => $_GET['wasteType'] ?? '',
                 'contractor' => $_GET['contractor'] ?? '',
+                'counterpartyId' => $_GET['counterpartyId'] ?? '',
             ]);
             jsonResponse($bunkers);
         } catch (Throwable $e) {
@@ -571,6 +861,9 @@ if ($route === 'bunkers') {
             jsonResponse($newBunker, 201);
         } catch (Throwable $e) {
             logThrowable('bunkers_create_failed', $e);
+            if ($e instanceof InvalidArgumentException) {
+                jsonResponse(['error' => $e->getMessage()], 400);
+            }
             jsonResponse(['error' => 'Не удалось создать бункер'], 500);
         }
     }
@@ -589,6 +882,9 @@ if ($route === 'bunkers') {
             jsonResponse($updated);
         } catch (Throwable $e) {
             logThrowable('bunkers_update_failed', $e, ['bunkerId' => $id]);
+            if ($e instanceof InvalidArgumentException) {
+                jsonResponse(['error' => $e->getMessage()], 400);
+            }
             jsonResponse(['error' => 'Не удалось обновить бункер'], 500);
         }
     }

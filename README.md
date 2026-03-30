@@ -55,10 +55,12 @@
 | Метод  | Путь               | Описание                                                      |
 |--------|---------------------|---------------------------------------------------------------|
 | GET    | /api/config         | Конфигурация (API-ключ карт)                                  |
-| GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...)  |
+| GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...&counterpartyId=...) |
 | POST   | /api/bunkers        | Создание бункера                                              |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |
 | DELETE | /api/bunkers/:id    | Удаление бункера                                              |
+
+- Для `bunkers` поддерживается `counterpartyId` (FK на `counterparties.id`), при этом поле `contractor` сохранено для обратной совместимости и отдаётся как `short_name` при наличии связи.
 
 ## Структура проекта
 
