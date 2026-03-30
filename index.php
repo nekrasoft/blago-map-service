@@ -64,7 +64,9 @@ requireMapAuth($config);
         </div>
         <div class="form-row">
           <label for="form-contractor">Контрагент</label>
-          <input type="text" id="form-contractor" required>
+          <select id="form-contractor" required>
+            <option value="">Выберите контрагента</option>
+          </select>
         </div>
         <div class="form-row">
           <label for="form-address">Адрес</label>

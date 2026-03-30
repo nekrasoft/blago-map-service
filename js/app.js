@@ -3,6 +3,7 @@ let placemarks = [];
 let allBunkers = [];
 let allFilterOptions = { districts: [], wasteTypes: [], contractors: [] };
 let allBunkersUnfiltered = [];
+let availableCounterparties = [];
 // Страница карты доступна только после авторизации (проверка в index.php)
 let isReadonly = window.READONLY_USER === true;
 
@@ -69,9 +70,65 @@ function init() {
     controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
   });
 
+  ensureCounterpartiesLoaded().then(function () {
+    populateCounterpartySelect();
+  });
   refreshFilterOptions();
   loadBunkers();
   bindEvents();
+}
+
+async function ensureCounterpartiesLoaded() {
+  try {
+    const data = await CounterpartyAPI.getAll();
+    availableCounterparties = (Array.isArray(data) ? data : [])
+      .filter(c => c && c.id != null && c.shortName)
+      .map(c => ({
+        id: Number(c.id),
+        shortName: String(c.shortName).trim(),
+        name: c.name ? String(c.name).trim() : ''
+      }))
+      .filter(c => Number.isFinite(c.id) && c.id > 0 && c.shortName)
+      .sort((a, b) => a.shortName.localeCompare(b.shortName, 'ru'));
+  } catch (err) {
+    console.error('Ошибка загрузки справочника контрагентов:', err);
+    availableCounterparties = [];
+  }
+}
+
+function populateCounterpartySelect(selectedCounterpartyId, fallbackContractorName) {
+  const select = document.getElementById('form-contractor');
+  if (!select) return;
+
+  const fallbackName = (fallbackContractorName || '').trim();
+  let selectedId = '';
+
+  if (selectedCounterpartyId != null && selectedCounterpartyId !== '') {
+    selectedId = String(selectedCounterpartyId);
+  } else if (fallbackName) {
+    const match = availableCounterparties.find(c => c.shortName === fallbackName);
+    if (match) selectedId = String(match.id);
+  }
+
+  const hasMatch = selectedId && availableCounterparties.some(c => String(c.id) === selectedId);
+  const placeholderText = !hasMatch && fallbackName
+    ? 'Выберите контрагента (текущий: ' + fallbackName + ')'
+    : 'Выберите контрагента';
+
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = placeholderText;
+  select.appendChild(placeholder);
+
+  availableCounterparties.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = String(c.id);
+    opt.textContent = c.shortName;
+    select.appendChild(opt);
+  });
+
+  select.value = hasMatch ? selectedId : '';
 }
 
 async function refreshFilterOptions() {
@@ -350,8 +407,10 @@ function closeModal() {
   document.getElementById('form-id').value = '';
 }
 
-function openCreateForm() {
+async function openCreateForm() {
+  await ensureCounterpartiesLoaded();
   openModal('Добавить бункер');
+  populateCounterpartySelect(null, '');
   document.getElementById('form-number').value = 0;
   document.getElementById('form-volume').value = 8;
   document.getElementById('form-fill').value = 0;
@@ -363,17 +422,18 @@ function openCreateForm() {
   document.getElementById('form-lng').value = center[1].toFixed(4);
 }
 
-function editBunker(id) {
+async function editBunker(id) {
   const b = allBunkers.find(x => x.id === id);
   if (!b) return;
 
+  await ensureCounterpartiesLoaded();
   map.balloon.close();
 
   openModal('Редактировать бункер ' + displayNumber(b.number));
   document.getElementById('form-id').value = b.id;
   document.getElementById('form-number').value = b.number;
   document.getElementById('form-volume').value = b.volume;
-  document.getElementById('form-contractor').value = b.contractor;
+  populateCounterpartySelect(b.counterpartyId, b.contractor);
   document.getElementById('form-address').value = b.address;
   formOriginalAddress = b.address;
   document.getElementById('form-district').value = b.district;
@@ -445,11 +505,31 @@ async function handleFormSubmit(e) {
     }
   }
 
+  const contractorSelect = document.getElementById('form-contractor');
+  const counterpartyIdValue = contractorSelect.value;
+  if (!counterpartyIdValue) {
+    alert('Выберите контрагента из списка');
+    contractorSelect.focus();
+    return;
+  }
+  const counterpartyId = parseInt(counterpartyIdValue, 10);
+  if (!Number.isInteger(counterpartyId) || counterpartyId <= 0) {
+    alert('Некорректный контрагент');
+    contractorSelect.focus();
+    return;
+  }
+  const selectedCounterparty = availableCounterparties.find(c => c.id === counterpartyId);
+  const selectedOption = contractorSelect.options[contractorSelect.selectedIndex];
+  const contractorName = selectedCounterparty
+    ? selectedCounterparty.shortName
+    : ((selectedOption && selectedOption.textContent) ? selectedOption.textContent : '').trim();
+
   const id = document.getElementById('form-id').value;
   const data = {
     number: parseInt(document.getElementById('form-number').value, 10),
     volume: parseInt(document.getElementById('form-volume').value, 10),
-    contractor: document.getElementById('form-contractor').value,
+    counterpartyId: counterpartyId,
+    contractor: contractorName,
     address: address,
     district: document.getElementById('form-district').value,
     wasteType: document.getElementById('form-waste').value,
@@ -479,7 +559,7 @@ async function handleFormSubmit(e) {
       return;
     }
     console.error('Ошибка сохранения:', err);
-    alert('Не удалось сохранить бункер');
+    alert(err.message || 'Не удалось сохранить бункер');
   }
 }
 

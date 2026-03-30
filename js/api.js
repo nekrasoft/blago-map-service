@@ -25,6 +25,7 @@ const BunkerAPI = {
     if (params.district) query.set('district', params.district);
     if (params.wasteType) query.set('wasteType', params.wasteType);
     if (params.contractor) query.set('contractor', params.contractor);
+    if (params.counterpartyId) query.set('counterpartyId', params.counterpartyId);
     const qs = query.toString();
     const url = '/api/bunkers' + (qs ? '?' + qs : '');
     const res = await fetch(url);
@@ -38,10 +39,11 @@ const BunkerAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    const payload = await res.json().catch(() => ({}));
     if (res.status === 401) throw new Error('auth_required');
     if (res.status === 403) throw new Error('readonly');
-    if (!res.ok) throw new Error('Ошибка создания бункера');
-    return res.json();
+    if (!res.ok) throw new Error(payload.error || 'Ошибка создания бункера');
+    return payload;
   },
 
   async update(id, data) {
@@ -50,17 +52,27 @@ const BunkerAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+    const payload = await res.json().catch(() => ({}));
     if (res.status === 401) throw new Error('auth_required');
     if (res.status === 403) throw new Error('readonly');
-    if (!res.ok) throw new Error('Ошибка обновления бункера');
-    return res.json();
+    if (!res.ok) throw new Error(payload.error || 'Ошибка обновления бункера');
+    return payload;
   },
 
   async remove(id) {
     const res = await fetch('/api/bunkers/' + id, { method: 'DELETE' });
+    const payload = await res.json().catch(() => ({}));
     if (res.status === 401) throw new Error('auth_required');
     if (res.status === 403) throw new Error('readonly');
-    if (!res.ok) throw new Error('Ошибка удаления бункера');
+    if (!res.ok) throw new Error(payload.error || 'Ошибка удаления бункера');
+    return payload;
+  }
+};
+
+const CounterpartyAPI = {
+  async getAll() {
+    const res = await fetch('/api/counterparties');
+    if (!res.ok) throw new Error('Ошибка загрузки контрагентов');
     return res.json();
   }
 };

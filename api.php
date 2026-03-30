@@ -590,6 +590,28 @@ function getBunkerById($pdo, $id)
     return mapBunkerRow($row);
 }
 
+function listCounterparties($pdo)
+{
+    if (!counterpartiesTableExists($pdo)) {
+        return [];
+    }
+
+    $stmt = $pdo->query(
+        'SELECT id, short_name AS shortName, name
+         FROM counterparties
+         ORDER BY short_name ASC'
+    );
+    $rows = $stmt->fetchAll();
+
+    return array_map(function ($row) {
+        return [
+            'id' => (int) $row['id'],
+            'shortName' => (string) ($row['shortName'] ?? ''),
+            'name' => (string) ($row['name'] ?? ''),
+        ];
+    }, $rows);
+}
+
 function createBunker($pdo, $body)
 {
     $nextNumber = (int) $pdo->query('SELECT COUNT(*) FROM bunkers')->fetchColumn() + 1;
@@ -813,6 +835,18 @@ if ($route === 'logout' && $method === 'POST') {
     $_SESSION = [];
     session_destroy();
     jsonResponse(['success' => true]);
+}
+
+// /api/counterparties
+if ($route === 'counterparties' && $method === 'GET') {
+    try {
+        $pdo = getMysqlConnection();
+        $items = listCounterparties($pdo);
+        jsonResponse($items);
+    } catch (Throwable $e) {
+        logThrowable('counterparties_get_failed', $e);
+        jsonResponse(['error' => 'Не удалось загрузить контрагентов'], 500);
+    }
 }
 
 // /api/bunkers
