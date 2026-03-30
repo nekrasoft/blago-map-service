@@ -144,6 +144,9 @@ function getMysqlConnection()
     if (!class_exists('PDO')) {
         throw new RuntimeException('PDO extension is not available');
     }
+    if (!in_array('mysql', PDO::getAvailableDrivers(), true)) {
+        throw new RuntimeException('PDO MySQL driver is not installed');
+    }
 
     $host = getenv('MYSQL_HOST') ?: 'localhost';
     $port = getenv('MYSQL_PORT') ?: '3306';
@@ -484,6 +487,9 @@ if ($route === 'bunkers') {
         $pdo = getBunkersDb($legacyDataFile);
     } catch (Throwable $e) {
         error_log('MySQL connection error in map-service: ' . $e->getMessage());
+        if (strpos($e->getMessage(), 'PDO MySQL driver is not installed') !== false || strpos($e->getMessage(), 'could not find driver') !== false) {
+            jsonResponse(['error' => 'Не удалось подключиться к MySQL: в PHP не включен драйвер pdo_mysql'], 500);
+        }
         jsonResponse(['error' => 'Не удалось подключиться к MySQL'], 500);
     }
 
