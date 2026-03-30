@@ -280,7 +280,26 @@ function renderList() {
   const list = document.getElementById('bunker-list');
   list.innerHTML = '';
 
-  allBunkers.forEach(b => {
+  const collator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true });
+  const sortedForSidebar = allBunkers.slice().sort(function (a, b) {
+    const contractorA = (a.contractor || '').trim();
+    const contractorB = (b.contractor || '').trim();
+    const contractorCmp = collator.compare(contractorA, contractorB);
+    if (contractorCmp !== 0) return contractorCmp;
+
+    const districtA = (a.district || '').trim();
+    const districtB = (b.district || '').trim();
+    const districtCmp = collator.compare(districtA, districtB);
+    if (districtCmp !== 0) return districtCmp;
+
+    const numA = Number(a.number) || 0;
+    const numB = Number(b.number) || 0;
+    if (numA !== numB) return numA - numB;
+
+    return collator.compare(String(a.id || ''), String(b.id || ''));
+  });
+
+  sortedForSidebar.forEach(b => {
     const cls = getFillClass(b.fillLevel);
     const label = displayNumber(b.number);
     const location = (b.district && b.district.trim()) || (b.address && b.address.trim()) || '—';
