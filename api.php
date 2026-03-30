@@ -186,14 +186,50 @@ function getSessionCounterpartyId()
 
 function getRequestApiToken()
 {
-    $header = trim((string) ($_SERVER['HTTP_X_API_KEY'] ?? ''));
-    if ($header !== '') {
-        return $header;
+    $xApiKeyCandidates = [
+        $_SERVER['HTTP_X_API_KEY'] ?? '',
+        $_SERVER['REDIRECT_HTTP_X_API_KEY'] ?? '',
+    ];
+
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        if (is_array($headers)) {
+            foreach ($headers as $name => $value) {
+                if (strcasecmp((string) $name, 'X-API-Key') === 0) {
+                    $xApiKeyCandidates[] = $value;
+                }
+            }
+        }
     }
 
-    $auth = trim((string) ($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-    if (preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
-        return trim((string) $m[1]);
+    foreach ($xApiKeyCandidates as $candidate) {
+        $candidate = trim((string) $candidate);
+        if ($candidate !== '') {
+            return $candidate;
+        }
+    }
+
+    $authCandidates = [
+        $_SERVER['HTTP_AUTHORIZATION'] ?? '',
+        $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '',
+    ];
+
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        if (is_array($headers)) {
+            foreach ($headers as $name => $value) {
+                if (strcasecmp((string) $name, 'Authorization') === 0) {
+                    $authCandidates[] = $value;
+                }
+            }
+        }
+    }
+
+    foreach ($authCandidates as $auth) {
+        $auth = trim((string) $auth);
+        if (preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
+            return trim((string) $m[1]);
+        }
     }
 
     return '';

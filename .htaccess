@@ -1,5 +1,9 @@
 RewriteEngine On
 
+# Проброс Authorization до PHP (Bearer-токен для API-ботов)
+RewriteCond %{HTTP:Authorization} .+
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
 # Единая каноническая версия: HTTPS + основной хост.
 RewriteCond %{HTTPS} !=on [OR]
 RewriteCond %{HTTP_HOST} !^map.blagokirov\.ru$ [NC]
