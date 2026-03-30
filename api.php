@@ -184,22 +184,97 @@ function getSessionCounterpartyId()
     return $counterpartyId;
 }
 
+function getRequestApiToken()
+{
+    $header = trim((string) ($_SERVER['HTTP_X_API_KEY'] ?? ''));
+    if ($header !== '') {
+        return $header;
+    }
+
+    $auth = trim((string) ($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+    if (preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) {
+        return trim((string) $m[1]);
+    }
+
+    return '';
+}
+
+function normalizeAllowedIps($rawIps)
+{
+    $parts = is_array($rawIps)
+        ? $rawIps
+        : preg_split('/[\s,;]+/', (string) $rawIps);
+
+    if (!is_array($parts)) {
+        return [];
+    }
+
+    $normalized = [];
+    foreach ($parts as $ip) {
+        $ip = trim((string) $ip);
+        if ($ip === '') {
+            continue;
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            continue;
+        }
+        $normalized[$ip] = true;
+    }
+
+    return array_keys($normalized);
+}
+
+function isRequestIpAllowed($allowedIps)
+{
+    if (empty($allowedIps)) {
+        return true;
+    }
+
+    $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($ip === '') {
+        return false;
+    }
+
+    return in_array($ip, $allowedIps, true);
+}
+
+function isMatchingApiToken($expectedToken)
+{
+    $expectedToken = trim((string) $expectedToken);
+    if ($expectedToken === '') {
+        return false;
+    }
+
+    $providedToken = getRequestApiToken();
+    if ($providedToken === '') {
+        return false;
+    }
+
+    return hash_equals($expectedToken, $providedToken);
+}
+
 /** Проверка API-ключа бота (X-API-Key или Authorization: Bearer) — для записи без сессии */
 function isBotAuthed($config)
 {
-    $key = $config['botApiKey'] ?? '';
-    if (!$key) {
+    if (!isMatchingApiToken($config['botApiKey'] ?? '')) {
         return false;
     }
-    $header = $_SERVER['HTTP_X_API_KEY'] ?? '';
-    if ($header === $key) {
-        return true;
+
+    return isRequestIpAllowed(normalizeAllowedIps($config['botAllowedIps'] ?? []));
+}
+
+/** Проверка read-only API-ключа бота (X-API-Key или Authorization: Bearer) */
+function isReadBotAuthed($config)
+{
+    if (isBotAuthed($config)) {
+        return true; // ключ записи автоматически имеет доступ на чтение
     }
-    $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if (preg_match('/^Bearer\s+(.+)$/i', trim($auth), $m) && $m[1] === $key) {
-        return true;
+
+    if (!isMatchingApiToken($config['botReadApiKey'] ?? '')) {
+        return false;
     }
-    return false;
+
+    return isRequestIpAllowed(normalizeAllowedIps($config['botAllowedIps'] ?? []));
 }
 
 function requireAuth($config)
@@ -207,6 +282,14 @@ function requireAuth($config)
     if (!isAuthed($config)) {
         jsonResponse(['error' => 'Требуется авторизация'], 401);
     }
+}
+
+function requireReadAuth($config)
+{
+    if (isReadBotAuthed($config)) {
+        return; // read-only бот с API-ключом
+    }
+    requireAuth($config);
 }
 
 function requireWriteAuth($config, $allowCounterpartyUser = false)
@@ -1121,7 +1204,7 @@ if ($route === 'logout' && $method === 'POST') {
 
 // /api/counterparties
 if ($route === 'counterparties' && $method === 'GET') {
-    requireAuth($config);
+    requireReadAuth($config);
     try {
         $pdo = getMysqlConnection();
         $items = listCounterparties($pdo);
@@ -1163,7 +1246,7 @@ if ($route === 'bunkers') {
 
     // GET /api/bunkers — список с фильтрацией
     if ($method === 'GET' && !$id) {
-        requireAuth($config);
+        requireReadAuth($config);
         try {
             $filters = [
                 'district' => $_GET['district'] ?? '',

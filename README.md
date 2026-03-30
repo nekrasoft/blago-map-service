@@ -45,6 +45,9 @@
    - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
    - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
    - `COUNTERPARTY_USERS_JSON` (опционально, учётки прорабов/мастеров)
+   - `MAP_BOT_API_KEY` (опционально, бот-запись для `mark-filled`)
+   - `MAP_BOT_READ_API_KEY` (опционально, read-only доступ бота к `GET /api/bunkers` и `GET /api/counterparties`)
+   - `MAP_BOT_ALLOWED_IPS` (опционально, IP allowlist для bot-ключей)
    - `MAX_BOT_TOKEN`, `MAX_REQUEST_CHAT_ID` (опционально, уведомления в чат MAX)
 7. При первом запуске API:
    - автоматически создаст таблицу `bunkers`;
@@ -68,6 +71,13 @@
 
 - Для `bunkers` поддерживается `counterpartyId` (FK на `counterparties.id`), при этом поле `contractor` сохранено для обратной совместимости и отдаётся как `short_name` при наличии связи.
 - Для пользователей-контрагентов `GET /api/bunkers` принудительно ограничивается их `counterpartyId`; обычные CRUD-операции недоступны, кроме `mark-filled`.
+
+### Авторизация ботов
+
+- Read-only бот: задайте `MAP_BOT_READ_API_KEY`; ключ передаётся в `X-API-Key` или `Authorization: Bearer <token>`.
+- Бот для записи `mark-filled`: задайте `MAP_BOT_API_KEY`; ключ также принимается через `X-API-Key` или `Authorization: Bearer <token>`.
+- `MAP_BOT_API_KEY` автоматически даёт и read-доступ к `GET /api/bunkers` и `GET /api/counterparties`.
+- Для дополнительной защиты можно задать `MAP_BOT_ALLOWED_IPS` (список IP через запятую): тогда bot-ключи работают только с этих адресов.
 
 ## Структура проекта
 
