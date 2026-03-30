@@ -55,7 +55,7 @@
 | Метод  | Путь               | Описание                                                      |
 |--------|---------------------|---------------------------------------------------------------|
 | GET    | /api/config         | Конфигурация (API-ключ карт)                                  |
-| GET    | /api/counterparties | Справочник контрагентов (`id`, `shortName`, `name`)           |
+| GET    | /api/counterparties | Справочник контрагентов (`id`, `shortName`, `name`, `schedule`) |
 | GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...&counterpartyId=...) |
 | POST   | /api/bunkers        | Создание бункера                                              |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |

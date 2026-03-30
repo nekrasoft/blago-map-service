@@ -600,11 +600,16 @@ function listCounterparties($pdo)
         return [];
     }
 
-    $stmt = $pdo->query(
-        'SELECT id, short_name AS shortName, name
-         FROM counterparties
-         ORDER BY short_name ASC'
-    );
+    $hasSchedule = columnExists($pdo, 'counterparties', 'invoice_schedule');
+    $sql = $hasSchedule
+        ? 'SELECT id, short_name AS shortName, name, invoice_schedule AS schedule
+           FROM counterparties
+           ORDER BY short_name ASC'
+        : 'SELECT id, short_name AS shortName, name, NULL AS schedule
+           FROM counterparties
+           ORDER BY short_name ASC';
+
+    $stmt = $pdo->query($sql);
     $rows = $stmt->fetchAll();
 
     return array_map(function ($row) {
@@ -612,6 +617,9 @@ function listCounterparties($pdo)
             'id' => (int) $row['id'],
             'shortName' => (string) ($row['shortName'] ?? ''),
             'name' => (string) ($row['name'] ?? ''),
+            'schedule' => array_key_exists('schedule', $row) && $row['schedule'] !== null
+                ? (string) $row['schedule']
+                : null,
         ];
     }, $rows);
 }
