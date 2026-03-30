@@ -190,33 +190,35 @@ function renderMarkers() {
       }
     );
 
-    pm.events.add('dragend', function () {
-      const coords = pm.geometry.getCoordinates();
-      ymaps.geocode(coords, { results: 1 }).then(function (res) {
-        const firstGeoObject = res.geoObjects.get(0);
-        const newAddress = firstGeoObject
-          ? firstGeoObject.getAddressLine()
-          : bunker.address;
-        return BunkerAPI.update(bunker.id, {
-          lat: coords[0],
-          lng: coords[1],
-          address: newAddress
+    if (!isReadonly) {
+      pm.events.add('dragend', function () {
+        const coords = pm.geometry.getCoordinates();
+        ymaps.geocode(coords, { results: 1 }).then(function (res) {
+          const firstGeoObject = res.geoObjects.get(0);
+          const newAddress = firstGeoObject
+            ? firstGeoObject.getAddressLine()
+            : bunker.address;
+          return BunkerAPI.update(bunker.id, {
+            lat: coords[0],
+            lng: coords[1],
+            address: newAddress
+          });
+        }).then(updated => {
+          bunker.lat = updated.lat;
+          bunker.lng = updated.lng;
+          bunker.address = updated.address;
+          pm.properties.set({
+            balloonContentBody: buildBalloonBody(bunker),
+            hintContent: 'Бункер ' + displayNumber(bunker.number) + (bunker.contractor ? ' — ' + bunker.contractor : '') + (bunker.address ? ', ' + bunker.address : '')
+          });
+          renderList();
+        }).catch(function (err) {
+        if (err.message === 'auth_required') window.location.href = '/login';
+        else if (err.message === 'readonly') alert('Доступ только для чтения');
+        else console.error('Ошибка обновления координат:', err);
         });
-      }).then(updated => {
-        bunker.lat = updated.lat;
-        bunker.lng = updated.lng;
-        bunker.address = updated.address;
-        pm.properties.set({
-          balloonContentBody: buildBalloonBody(bunker),
-          hintContent: 'Бункер ' + displayNumber(bunker.number) + (bunker.contractor ? ' — ' + bunker.contractor : '') + (bunker.address ? ', ' + bunker.address : '')
-        });
-        renderList();
-      }).catch(function (err) {
-      if (err.message === 'auth_required') window.location.href = '/login';
-      else if (err.message === 'readonly') alert('Доступ только для чтения');
-      else console.error('Ошибка обновления координат:', err);
-    });
-    });
+      });
+    }
 
     pm.bunkerData = bunker;
     map.geoObjects.add(pm);
