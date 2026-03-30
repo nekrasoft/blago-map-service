@@ -89,6 +89,51 @@ function jsonResponse($data, $code = 200)
     exit;
 }
 
+function writeAppLog($level, $message, $context = [])
+{
+    $logFile = getenv('APP_LOG_FILE') ?: (__DIR__ . '/logs/api-error.log');
+    $logDir = dirname($logFile);
+
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+
+    $record = [
+        'time' => date('c'),
+        'level' => $level,
+        'message' => $message,
+        'request' => [
+            'method' => $_SERVER['REQUEST_METHOD'] ?? '',
+            'uri' => $_SERVER['REQUEST_URI'] ?? '',
+            'route' => $_GET['route'] ?? '',
+            'id' => $_GET['id'] ?? null,
+            'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+        ],
+        'context' => $context,
+    ];
+
+    $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($line === false) {
+        $line = date('c') . ' [' . $level . '] ' . $message;
+    }
+
+    if (@file_put_contents($logFile, $line . PHP_EOL, FILE_APPEND | LOCK_EX) === false) {
+        error_log('map-service: failed to write app log');
+    }
+}
+
+function logThrowable($message, $e, $context = [])
+{
+    $context['exception'] = [
+        'class' => get_class($e),
+        'message' => $e->getMessage(),
+        'code' => $e->getCode(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+    ];
+    writeAppLog('error', $message, $context);
+}
+
 function isAuthed($config)
 {
     if (empty($config['users'])) {
@@ -486,7 +531,14 @@ if ($route === 'bunkers') {
     try {
         $pdo = getBunkersDb($legacyDataFile);
     } catch (Throwable $e) {
-        error_log('MySQL connection error in map-service: ' . $e->getMessage());
+        logThrowable('mysql_connection_failed', $e, [
+            'mysql' => [
+                'host' => getenv('MYSQL_HOST') ?: 'localhost',
+                'port' => getenv('MYSQL_PORT') ?: '3306',
+                'user' => getenv('MYSQL_USER') ?: 'map_service',
+                'database' => getenv('MYSQL_DATABASE') ?: 'map_service',
+            ],
+        ]);
         if (strpos($e->getMessage(), 'PDO MySQL driver is not installed') !== false || strpos($e->getMessage(), 'could not find driver') !== false) {
             jsonResponse(['error' => 'Не удалось подключиться к MySQL: в PHP не включен драйвер pdo_mysql'], 500);
         }
@@ -495,45 +547,65 @@ if ($route === 'bunkers') {
 
     // GET /api/bunkers — список с фильтрацией
     if ($method === 'GET' && !$id) {
-        $bunkers = listBunkers($pdo, [
-            'district' => $_GET['district'] ?? '',
-            'wasteType' => $_GET['wasteType'] ?? '',
-            'contractor' => $_GET['contractor'] ?? '',
-        ]);
-        jsonResponse($bunkers);
+        try {
+            $bunkers = listBunkers($pdo, [
+                'district' => $_GET['district'] ?? '',
+                'wasteType' => $_GET['wasteType'] ?? '',
+                'contractor' => $_GET['contractor'] ?? '',
+            ]);
+            jsonResponse($bunkers);
+        } catch (Throwable $e) {
+            logThrowable('bunkers_get_failed', $e);
+            jsonResponse(['error' => 'Не удалось загрузить бункеры'], 500);
+        }
     }
 
     // POST /api/bunkers — создание
     if ($method === 'POST' && !$id) {
         requireWriteAuth($config);
-        $body = getRequestBody();
-        $newBunker = createBunker($pdo, $body);
-        jsonResponse($newBunker, 201);
+        try {
+            $body = getRequestBody();
+            $newBunker = createBunker($pdo, $body);
+            jsonResponse($newBunker, 201);
+        } catch (Throwable $e) {
+            logThrowable('bunkers_create_failed', $e);
+            jsonResponse(['error' => 'Не удалось создать бункер'], 500);
+        }
     }
 
     // PUT /api/bunkers/:id — обновление
     if ($method === 'PUT' && $id) {
         requireWriteAuth($config);
-        $body = getRequestBody();
-        $updated = updateBunker($pdo, $id, $body);
+        try {
+            $body = getRequestBody();
+            $updated = updateBunker($pdo, $id, $body);
 
-        if (!$updated) {
-            jsonResponse(['error' => 'Бункер не найден'], 404);
+            if (!$updated) {
+                jsonResponse(['error' => 'Бункер не найден'], 404);
+            }
+
+            jsonResponse($updated);
+        } catch (Throwable $e) {
+            logThrowable('bunkers_update_failed', $e, ['bunkerId' => $id]);
+            jsonResponse(['error' => 'Не удалось обновить бункер'], 500);
         }
-
-        jsonResponse($updated);
     }
 
     // DELETE /api/bunkers/:id — удаление
     if ($method === 'DELETE' && $id) {
         requireWriteAuth($config);
-        $deleted = deleteBunkerById($pdo, $id);
+        try {
+            $deleted = deleteBunkerById($pdo, $id);
 
-        if (!$deleted) {
-            jsonResponse(['error' => 'Бункер не найден'], 404);
+            if (!$deleted) {
+                jsonResponse(['error' => 'Бункер не найден'], 404);
+            }
+
+            jsonResponse(['success' => true]);
+        } catch (Throwable $e) {
+            logThrowable('bunkers_delete_failed', $e, ['bunkerId' => $id]);
+            jsonResponse(['error' => 'Не удалось удалить бункер'], 500);
         }
-
-        jsonResponse(['success' => true]);
     }
 }
 

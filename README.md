@@ -18,6 +18,7 @@
 - **Фронтенд:** Vanilla JS + Яндекс.Карты API 2.1
 - **БД:** MySQL (`bunkers`)
 - **Важно:** в PHP должно быть включено расширение `pdo_mysql`
+- **Логи API:** `logs/api-error.log` (или путь из `APP_LOG_FILE`)
 
 ## Установка на хостинг (Beget, поддомен map.blagokirov.ru)
 
