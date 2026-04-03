@@ -945,13 +945,22 @@ function listCounterparties($pdo)
     }
 
     $hasSchedule = columnExists($pdo, 'counterparties', 'invoice_schedule');
-    $sql = $hasSchedule
-        ? 'SELECT id, short_name AS shortName, name, invoice_schedule AS schedule
-           FROM counterparties
-           ORDER BY short_name ASC'
-        : 'SELECT id, short_name AS shortName, name, NULL AS schedule
-           FROM counterparties
-           ORDER BY short_name ASC';
+    $hasOperationType = columnExists($pdo, 'counterparties', 'operation_type');
+    $hasStatus = columnExists($pdo, 'counterparties', 'status');
+
+    $select = [
+        'id',
+        'short_name AS shortName',
+        'name',
+        $hasSchedule ? 'invoice_schedule AS schedule' : 'NULL AS schedule',
+        $hasOperationType ? 'operation_type' : 'NULL AS operation_type',
+    ];
+
+    $sql = 'SELECT ' . implode(', ', $select) . ' FROM counterparties';
+    if ($hasStatus) {
+        $sql .= ' WHERE status = \'active\'';
+    }
+    $sql .= ' ORDER BY short_name ASC';
 
     $stmt = $pdo->query($sql);
     $rows = $stmt->fetchAll();
@@ -963,6 +972,9 @@ function listCounterparties($pdo)
             'name' => (string) ($row['name'] ?? ''),
             'schedule' => array_key_exists('schedule', $row) && $row['schedule'] !== null
                 ? (string) $row['schedule']
+                : null,
+            'operation_type' => array_key_exists('operation_type', $row) && $row['operation_type'] !== null
+                ? (string) $row['operation_type']
                 : null,
         ];
     }, $rows);
