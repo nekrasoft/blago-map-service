@@ -47,9 +47,6 @@ if ($isCounterpartyUser) {
       <select id="filter-district">
         <option value="">Все районы</option>
       </select>
-      <select id="filter-waste">
-        <option value="">Все типы мусора</option>
-      </select>
       <select id="filter-contractor">
         <option value="">Все контрагенты</option>
       </select>

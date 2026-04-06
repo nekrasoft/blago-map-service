@@ -1,7 +1,7 @@
 let map;
 let placemarks = [];
 let allBunkers = [];
-let allFilterOptions = { districts: [], wasteTypes: [], contractors: [] };
+let allFilterOptions = { districts: [], contractors: [] };
 let allBunkersUnfiltered = [];
 let availableCounterparties = [];
 // Страница карты доступна только после авторизации (проверка в index.php)
@@ -154,7 +154,6 @@ async function refreshFilterOptions() {
   try {
     allBunkersUnfiltered = await BunkerAPI.getAll({});
     allFilterOptions.districts = [...new Set(allBunkersUnfiltered.map(b => b.district).filter(Boolean))].sort();
-    allFilterOptions.wasteTypes = [...new Set(allBunkersUnfiltered.map(b => b.wasteType).filter(Boolean))].sort();
     allFilterOptions.contractors = [...new Set(allBunkersUnfiltered.map(b => b.contractor).filter(Boolean))].sort();
   } catch (err) {
     console.error('Ошибка загрузки опций фильтров:', err);
@@ -166,7 +165,6 @@ async function refreshFilterOptions() {
 function getCurrentFilters() {
   return {
     district: document.getElementById('filter-district').value,
-    wasteType: document.getElementById('filter-waste').value,
     contractor: document.getElementById('filter-contractor').value
   };
 }
@@ -369,7 +367,6 @@ function countByField(field, otherFilters) {
   allBunkersUnfiltered.forEach(function (b) {
     var match = true;
     if (otherFilters.district && b.district !== otherFilters.district) match = false;
-    if (otherFilters.wasteType && b.wasteType !== otherFilters.wasteType) match = false;
     if (otherFilters.contractor && b.contractor !== otherFilters.contractor) match = false;
     if (match && b[field]) {
       counts[b[field]] = (counts[b[field]] || 0) + 1;
@@ -380,16 +377,13 @@ function countByField(field, otherFilters) {
 
 function updateFilterOptions() {
   const districtSelect = document.getElementById('filter-district');
-  const wasteSelect = document.getElementById('filter-waste');
   const contractorSelect = document.getElementById('filter-contractor');
 
   const currentDistrict = districtSelect.value;
-  const currentWaste = wasteSelect.value;
   const currentContractor = contractorSelect.value;
 
-  const districtCounts = countByField('district', { wasteType: currentWaste, contractor: currentContractor });
-  const wasteCounts = countByField('wasteType', { district: currentDistrict, contractor: currentContractor });
-  const contractorCounts = countByField('contractor', { district: currentDistrict, wasteType: currentWaste });
+  const districtCounts = countByField('district', { contractor: currentContractor });
+  const contractorCounts = countByField('contractor', { district: currentDistrict });
 
   districtSelect.innerHTML = '<option value="">Все районы</option>';
   allFilterOptions.districts.forEach(d => {
@@ -399,16 +393,6 @@ function updateFilterOptions() {
     opt.textContent = d + ' (' + cnt + ')';
     if (d === currentDistrict) opt.selected = true;
     districtSelect.appendChild(opt);
-  });
-
-  wasteSelect.innerHTML = '<option value="">Все типы мусора</option>';
-  allFilterOptions.wasteTypes.forEach(w => {
-    const opt = document.createElement('option');
-    opt.value = w;
-    var cnt = wasteCounts[w] || 0;
-    opt.textContent = w + ' (' + cnt + ')';
-    if (w === currentWaste) opt.selected = true;
-    wasteSelect.appendChild(opt);
   });
 
   contractorSelect.innerHTML = '<option value="">Все контрагенты</option>';
@@ -424,11 +408,10 @@ function updateFilterOptions() {
 
 async function applyFilters() {
   const district = document.getElementById('filter-district').value;
-  const wasteType = document.getElementById('filter-waste').value;
   const contractor = document.getElementById('filter-contractor').value;
   const onlyFull = document.getElementById('filter-full').checked;
-  const hasFilter = district || wasteType || contractor || onlyFull;
-  await loadBunkers({ district, wasteType, contractor });
+  const hasFilter = district || contractor || onlyFull;
+  await loadBunkers({ district, contractor });
   if (hasFilter && allBunkers.length > 0) {
     fitMapToBunkers();
   }
@@ -754,7 +737,6 @@ function bindEvents() {
   document.getElementById('btn-cancel').addEventListener('click', closeModal);
   document.getElementById('bunker-form').addEventListener('submit', handleFormSubmit);
   document.getElementById('filter-district').addEventListener('change', applyFilters);
-  document.getElementById('filter-waste').addEventListener('change', applyFilters);
   document.getElementById('filter-contractor').addEventListener('change', applyFilters);
   document.getElementById('filter-full').addEventListener('change', applyFilters);
   document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
