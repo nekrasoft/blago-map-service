@@ -141,10 +141,25 @@ function logThrowable($message, $e, $context = [])
     writeAppLog('error', $message, $context);
 }
 
+function hasConfiguredUsers($config)
+{
+    if (!empty($config['users'])) {
+        return true;
+    }
+
+    try {
+        $pdo = getAuthDb();
+        return countActiveCounterpartyUsers($pdo) > 0;
+    } catch (Throwable $e) {
+        logThrowable('counterparty_users_count_failed', $e);
+        return false;
+    }
+}
+
 function isAuthed($config)
 {
-    if (empty($config['users'])) {
-        return true; // без настройки users — доступ без авторизации
+    if (!hasConfiguredUsers($config)) {
+        return true; // без пользователей — доступ без авторизации
     }
     return isset($_SESSION['user']);
 }
@@ -507,6 +522,76 @@ function getMysqlConnection()
     ]);
 
     return $pdo;
+}
+
+function ensureCounterpartyUsersTable($pdo)
+{
+    static $ensured = false;
+
+    if ($ensured) {
+        return;
+    }
+
+    $sql = <<<SQL
+CREATE TABLE IF NOT EXISTS counterparty_users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    login VARCHAR(191) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    counterparty_id INT UNSIGNED NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_counterparty_users_login (login),
+    KEY idx_counterparty_users_counterparty_id (counterparty_id),
+    KEY idx_counterparty_users_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL;
+
+    $pdo->exec($sql);
+    $ensured = true;
+}
+
+function getAuthDb()
+{
+    $pdo = getMysqlConnection();
+    ensureCounterpartyUsersTable($pdo);
+
+    return $pdo;
+}
+
+function countActiveCounterpartyUsers($pdo)
+{
+    $stmt = $pdo->query('SELECT COUNT(*) FROM counterparty_users WHERE is_active = 1');
+    return (int) $stmt->fetchColumn();
+}
+
+function findActiveCounterpartyUserByLogin($pdo, $login)
+{
+    $login = trim((string) $login);
+    if ($login === '') {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT id, login, password_hash, counterparty_id
+         FROM counterparty_users
+         WHERE login = :login AND is_active = 1
+         LIMIT 1'
+    );
+    $stmt->execute(['login' => $login]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'id' => (int) ($row['id'] ?? 0),
+        'login' => (string) ($row['login'] ?? ''),
+        'password_hash' => (string) ($row['password_hash'] ?? ''),
+        'counterparty_id' => (int) ($row['counterparty_id'] ?? 0),
+    ];
 }
 
 function initBunkersTable($pdo)
@@ -1208,7 +1293,7 @@ if ($route === 'login' && $method === 'POST') {
     $login = trim($body['login'] ?? '');
     $pass = $body['password'] ?? '';
 
-    if (empty($config['users'])) {
+    if (!hasConfiguredUsers($config)) {
         jsonResponse(['error' => 'Авторизация не настроена'], 400);
     }
 
@@ -1216,17 +1301,41 @@ if ($route === 'login' && $method === 'POST') {
         jsonResponse(['error' => 'Укажите логин и пароль'], 400);
     }
 
+    $counterpartyId = null;
+    $readonly = false;
     $hash = $config['users'][$login] ?? null;
-    if (!$hash || !password_verify($pass, $hash)) {
-        jsonResponse(['error' => 'Неверный логин или пароль'], 401);
+
+    if ($hash !== null) {
+        if (!password_verify($pass, $hash)) {
+            jsonResponse(['error' => 'Неверный логин или пароль'], 401);
+        }
+
+        $readonly = in_array($login, $config['readonlyUsers'] ?? [], true);
+        $counterpartyAccess = getCounterpartyAccessMap($config);
+        $counterpartyId = array_key_exists($login, $counterpartyAccess)
+            ? (int) $counterpartyAccess[$login]
+            : null;
+    } else {
+        try {
+            $counterpartyUser = findActiveCounterpartyUserByLogin(getAuthDb(), $login);
+        } catch (Throwable $e) {
+            logThrowable('counterparty_user_auth_failed', $e, ['login' => $login]);
+            jsonResponse(['error' => 'Не удалось выполнить авторизацию'], 500);
+        }
+
+        $passwordHash = (string) ($counterpartyUser['password_hash'] ?? '');
+        if (!$counterpartyUser || $passwordHash === '' || !password_verify($pass, $passwordHash)) {
+            jsonResponse(['error' => 'Неверный логин или пароль'], 401);
+        }
+
+        $counterpartyId = (int) ($counterpartyUser['counterparty_id'] ?? 0);
+        if ($counterpartyId <= 0) {
+            jsonResponse(['error' => 'Учётная запись не привязана к контрагенту'], 403);
+        }
     }
 
     $_SESSION['user'] = $login;
-    $_SESSION['readonly'] = in_array($login, $config['readonlyUsers'] ?? [], true);
-    $counterpartyAccess = getCounterpartyAccessMap($config);
-    $counterpartyId = array_key_exists($login, $counterpartyAccess)
-        ? (int) $counterpartyAccess[$login]
-        : null;
+    $_SESSION['readonly'] = $readonly;
 
     if ($counterpartyId !== null && $counterpartyId > 0) {
         $_SESSION['counterparty_id'] = $counterpartyId;

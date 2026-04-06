@@ -18,7 +18,7 @@
 
 - **Бэкенд:** PHP (единственный файл `api.php`)
 - **Фронтенд:** Vanilla JS + Яндекс.Карты API 2.1
-- **БД:** MySQL (`bunkers`)
+- **БД:** MySQL (`bunkers`, `counterparty_users`, `counterparties`)
 - **Важно:** в PHP должно быть включено расширение `pdo_mysql`
 - **Логи API:** `logs/api-error.log` (или путь из `APP_LOG_FILE`)
 
@@ -44,15 +44,20 @@
    - `YANDEX_MAPS_API_KEY`
    - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
    - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
-   - `COUNTERPARTY_USERS_JSON` (опционально, учётки прорабов/мастеров)
    - `MAP_BOT_API_KEY` (опционально, бот-запись для `mark-filled`)
    - `MAP_BOT_READ_API_KEY` (опционально, read-only доступ бота к `GET /api/bunkers` и `GET /api/counterparties`)
    - `MAP_BOT_ALLOWED_IPS` (опционально, IP allowlist для bot-ключей)
    - `MAX_BOT_TOKEN`, `MAX_REQUEST_CHAT_ID` (опционально, уведомления в чат MAX)
 7. При первом запуске API:
    - автоматически создаст таблицу `bunkers`;
+   - автоматически создаст таблицу `counterparty_users`;
    - автоматически импортирует данные из `data/bunkers.json`, если таблица пуста.
-8. Если нужен legacy-источник для первого запуска, оставьте `data/bunkers.json` рядом с проектом.
+8. Пользователей-контрагентов добавляйте в таблицу `counterparty_users` (через админку cp):
+   - `login` — логин пользователя
+   - `password_hash` — хеш пароля (`password_hash`)
+   - `counterparty_id` — ID контрагента из `counterparties.id`
+   - `is_active` — активность учётки
+9. Если нужен legacy-источник для первого запуска, оставьте `data/bunkers.json` рядом с проектом.
    ```bash
    chmod 644 data/bunkers.json
    ```
