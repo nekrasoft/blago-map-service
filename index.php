@@ -47,9 +47,11 @@ if ($isCounterpartyUser) {
       <select id="filter-district">
         <option value="">Все районы</option>
       </select>
+      <?php if (!$isCounterpartyUser): ?>
       <select id="filter-contractor">
         <option value="">Все контрагенты</option>
       </select>
+      <?php endif; ?>
       <label class="filter-checkbox"><input type="checkbox" id="filter-full"> Заполненные</label>
     </div>
 

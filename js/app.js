@@ -163,9 +163,10 @@ async function refreshFilterOptions() {
 // ===== Загрузка и отображение бункеров =====
 
 function getCurrentFilters() {
+  const contractorSelect = document.getElementById('filter-contractor');
   return {
     district: document.getElementById('filter-district').value,
-    contractor: document.getElementById('filter-contractor').value
+    contractor: contractorSelect ? contractorSelect.value : ''
   };
 }
 
@@ -380,7 +381,7 @@ function updateFilterOptions() {
   const contractorSelect = document.getElementById('filter-contractor');
 
   const currentDistrict = districtSelect.value;
-  const currentContractor = contractorSelect.value;
+  const currentContractor = contractorSelect ? contractorSelect.value : '';
 
   const districtCounts = countByField('district', { contractor: currentContractor });
   const contractorCounts = countByField('contractor', { district: currentDistrict });
@@ -395,20 +396,23 @@ function updateFilterOptions() {
     districtSelect.appendChild(opt);
   });
 
-  contractorSelect.innerHTML = '<option value="">Все контрагенты</option>';
-  allFilterOptions.contractors.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c;
-    var cnt = contractorCounts[c] || 0;
-    opt.textContent = c + ' (' + cnt + ')';
-    if (c === currentContractor) opt.selected = true;
-    contractorSelect.appendChild(opt);
-  });
+  if (contractorSelect) {
+    contractorSelect.innerHTML = '<option value="">Все контрагенты</option>';
+    allFilterOptions.contractors.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      var cnt = contractorCounts[c] || 0;
+      opt.textContent = c + ' (' + cnt + ')';
+      if (c === currentContractor) opt.selected = true;
+      contractorSelect.appendChild(opt);
+    });
+  }
 }
 
 async function applyFilters() {
   const district = document.getElementById('filter-district').value;
-  const contractor = document.getElementById('filter-contractor').value;
+  const contractorSelect = document.getElementById('filter-contractor');
+  const contractor = contractorSelect ? contractorSelect.value : '';
   const onlyFull = document.getElementById('filter-full').checked;
   const hasFilter = district || contractor || onlyFull;
   await loadBunkers({ district, contractor });
@@ -737,7 +741,8 @@ function bindEvents() {
   document.getElementById('btn-cancel').addEventListener('click', closeModal);
   document.getElementById('bunker-form').addEventListener('submit', handleFormSubmit);
   document.getElementById('filter-district').addEventListener('change', applyFilters);
-  document.getElementById('filter-contractor').addEventListener('change', applyFilters);
+  const filterContractor = document.getElementById('filter-contractor');
+  if (filterContractor) filterContractor.addEventListener('change', applyFilters);
   document.getElementById('filter-full').addEventListener('change', applyFilters);
   document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
   document.getElementById('btn-toggle-sidebar').addEventListener('click', showSidebar);
