@@ -89,7 +89,7 @@ function init() {
     });
   }
   refreshFilterOptions();
-  loadBunkers();
+  loadBunkers(undefined, { fitToBunkers: true });
   bindEvents();
 }
 
@@ -170,7 +170,8 @@ function getCurrentFilters() {
   };
 }
 
-async function loadBunkers(filters) {
+async function loadBunkers(filters, options) {
+  const opts = options || {};
   try {
     allBunkers = await BunkerAPI.getAll(filters || getCurrentFilters());
     if (document.getElementById('filter-full').checked) {
@@ -180,6 +181,9 @@ async function loadBunkers(filters) {
     renderList();
     updateFilterOptions();
     document.getElementById('bunker-count').textContent = allBunkers.length;
+    if (opts.fitToBunkers && allBunkers.length > 0) {
+      fitMapToBunkers();
+    }
   } catch (err) {
     console.error('Ошибка загрузки:', err);
   }
