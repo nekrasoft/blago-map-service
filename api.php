@@ -199,6 +199,79 @@ function getSessionCounterpartyId()
     return $counterpartyId;
 }
 
+function normalizeCaseInsensitiveValue($value)
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($value, 'UTF-8');
+    }
+
+    return strtolower($value);
+}
+
+function normalizeDistrictScopeTokens($rawScope)
+{
+    $parts = is_array($rawScope)
+        ? $rawScope
+        : preg_split('/[\r\n,;|]+/u', (string) $rawScope);
+
+    if (!is_array($parts)) {
+        return [];
+    }
+
+    $tokens = [];
+    foreach ($parts as $token) {
+        $token = normalizeCaseInsensitiveValue($token);
+        if ($token === '') {
+            continue;
+        }
+        $tokens[$token] = true;
+    }
+
+    return array_keys($tokens);
+}
+
+function getSessionDistrictScopeRaw()
+{
+    $value = $_SESSION['counterparty_district_scope'] ?? null;
+    if ($value === null) {
+        return null;
+    }
+
+    $value = trim((string) $value);
+
+    return $value === '' ? null : $value;
+}
+
+function getSessionDistrictScopeTokens()
+{
+    return normalizeDistrictScopeTokens(getSessionDistrictScopeRaw());
+}
+
+function districtMatchesScope($district, $scopeTokens)
+{
+    if (empty($scopeTokens)) {
+        return true;
+    }
+
+    $districtNorm = normalizeCaseInsensitiveValue($district);
+    if ($districtNorm === '') {
+        return false;
+    }
+
+    foreach ($scopeTokens as $token) {
+        if ($token !== '' && strpos($districtNorm, (string) $token) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function getRequestApiToken()
 {
     $xApiKeyCandidates = [
@@ -357,7 +430,7 @@ function requireWriteAuth($config, $allowCounterpartyUser = false)
     }
 }
 
-function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId)
+function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId, $districtScopeTokens = [])
 {
     if ($counterpartyId === null) {
         return;
@@ -369,6 +442,11 @@ function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId)
 
     if ($bunkerCounterpartyId <= 0 || $bunkerCounterpartyId !== (int) $counterpartyId) {
         jsonResponse(['error' => 'Нет доступа к этому бункеру'], 403);
+    }
+
+    $bunkerDistrict = (string) ($bunker['district'] ?? '');
+    if (!districtMatchesScope($bunkerDistrict, $districtScopeTokens)) {
+        jsonResponse(['error' => 'Нет доступа к этому району'], 403);
     }
 }
 
@@ -538,17 +616,28 @@ CREATE TABLE IF NOT EXISTS counterparty_users (
     login VARCHAR(191) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     counterparty_id INT UNSIGNED NOT NULL,
+    district_scope VARCHAR(255) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_counterparty_users_login (login),
     KEY idx_counterparty_users_counterparty_id (counterparty_id),
+    KEY idx_counterparty_users_district_scope (district_scope),
     KEY idx_counterparty_users_is_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 
     $pdo->exec($sql);
+
+    if (!columnExists($pdo, 'counterparty_users', 'district_scope')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD COLUMN district_scope VARCHAR(255) NULL AFTER counterparty_id');
+    }
+
+    if (!indexExists($pdo, 'counterparty_users', 'idx_counterparty_users_district_scope')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD INDEX idx_counterparty_users_district_scope (district_scope)');
+    }
+
     $ensured = true;
 }
 
@@ -574,7 +663,7 @@ function findActiveCounterpartyUserByLogin($pdo, $login)
     }
 
     $stmt = $pdo->prepare(
-        'SELECT id, login, password_hash, counterparty_id
+        'SELECT id, login, password_hash, counterparty_id, district_scope
          FROM counterparty_users
          WHERE login = :login AND is_active = 1
          LIMIT 1'
@@ -591,6 +680,9 @@ function findActiveCounterpartyUserByLogin($pdo, $login)
         'login' => (string) ($row['login'] ?? ''),
         'password_hash' => (string) ($row['password_hash'] ?? ''),
         'counterparty_id' => (int) ($row['counterparty_id'] ?? 0),
+        'district_scope' => array_key_exists('district_scope', $row) && $row['district_scope'] !== null
+            ? trim((string) $row['district_scope'])
+            : null,
     ];
 }
 
@@ -973,6 +1065,23 @@ function listBunkers($pdo, $filters = [])
         $where[] = 'b.counterparty_id = :counterpartyId';
         $params['counterpartyId'] = (int) $filters['counterpartyId'];
     }
+    if (!empty($filters['districtScopeTokens']) && is_array($filters['districtScopeTokens'])) {
+        $scopeWhere = [];
+        foreach (array_values($filters['districtScopeTokens']) as $index => $token) {
+            $token = normalizeCaseInsensitiveValue($token);
+            if ($token === '') {
+                continue;
+            }
+
+            $paramName = 'districtScope' . $index;
+            $scopeWhere[] = 'LOWER(b.district) LIKE :' . $paramName;
+            $params[$paramName] = '%' . $token . '%';
+        }
+
+        if ($scopeWhere) {
+            $where[] = '(' . implode(' OR ', $scopeWhere) . ')';
+        }
+    }
 
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -1278,11 +1387,13 @@ if ($route === 'config' && $method === 'GET') {
 // GET /api/auth — проверка авторизации
 if ($route === 'auth' && $method === 'GET') {
     $counterpartyId = getSessionCounterpartyId();
+    $districtScope = getSessionDistrictScopeRaw();
     jsonResponse([
         'authenticated' => isAuthed($config),
         'user' => $_SESSION['user'] ?? null,
         'readonly' => !empty($_SESSION['readonly']),
         'counterpartyId' => $counterpartyId,
+        'districtScope' => $districtScope,
         'isCounterpartyUser' => $counterpartyId !== null,
     ]);
 }
@@ -1302,6 +1413,7 @@ if ($route === 'login' && $method === 'POST') {
     }
 
     $counterpartyId = null;
+    $districtScope = null;
     $readonly = false;
     $hash = $config['users'][$login] ?? null;
 
@@ -1332,6 +1444,14 @@ if ($route === 'login' && $method === 'POST') {
         if ($counterpartyId <= 0) {
             jsonResponse(['error' => 'Учётная запись не привязана к контрагенту'], 403);
         }
+
+        $districtScope = array_key_exists('district_scope', $counterpartyUser)
+            ? trim((string) ($counterpartyUser['district_scope'] ?? ''))
+            : '';
+
+        if ($districtScope === '') {
+            $districtScope = null;
+        }
     }
 
     $_SESSION['user'] = $login;
@@ -1339,15 +1459,24 @@ if ($route === 'login' && $method === 'POST') {
 
     if ($counterpartyId !== null && $counterpartyId > 0) {
         $_SESSION['counterparty_id'] = $counterpartyId;
+
+        if ($districtScope !== null) {
+            $_SESSION['counterparty_district_scope'] = $districtScope;
+        } else {
+            unset($_SESSION['counterparty_district_scope']);
+        }
     } else {
         unset($_SESSION['counterparty_id']);
+        unset($_SESSION['counterparty_district_scope']);
         $counterpartyId = null;
+        $districtScope = null;
     }
 
     jsonResponse([
         'user' => $login,
         'readonly' => $_SESSION['readonly'],
         'counterpartyId' => $counterpartyId,
+        'districtScope' => $districtScope,
         'isCounterpartyUser' => $counterpartyId !== null,
     ]);
 }
@@ -1400,6 +1529,7 @@ if ($route === 'bunkers') {
     }
 
     $sessionCounterpartyId = getSessionCounterpartyId();
+    $sessionDistrictScopeTokens = getSessionDistrictScopeTokens();
 
     // GET /api/bunkers — список с фильтрацией
     if ($method === 'GET' && !$id) {
@@ -1414,6 +1544,9 @@ if ($route === 'bunkers') {
 
             if ($sessionCounterpartyId !== null) {
                 $filters['counterpartyId'] = $sessionCounterpartyId;
+            }
+            if (!empty($sessionDistrictScopeTokens)) {
+                $filters['districtScopeTokens'] = $sessionDistrictScopeTokens;
             }
 
             $bunkers = listBunkers($pdo, $filters);
@@ -1433,7 +1566,7 @@ if ($route === 'bunkers') {
                 jsonResponse(['error' => 'Бункер не найден'], 404);
             }
 
-            ensureCounterpartyCanAccessBunker($bunker, $sessionCounterpartyId);
+            ensureCounterpartyCanAccessBunker($bunker, $sessionCounterpartyId, $sessionDistrictScopeTokens);
 
             $filledBy = isBotAuthed($config)
                 ? 'bot'
