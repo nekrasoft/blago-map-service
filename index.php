@@ -36,7 +36,7 @@ if ($isCounterpartyUser) {
       </div>
       <div class="auth-actions">
         <?php if ($isCounterpartyUser): ?>
-        <a id="btn-go-cp" class="btn btn-secondary" href="/sso-cp" title="Перейти в биллинг">Биллинг</a>
+        <a id="btn-go-cp" class="btn btn-secondary" href="/sso-cp" target="_blank" rel="noopener noreferrer" title="Перейти в биллинг">Биллинг</a>
         <?php endif; ?>
         <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
       </div>

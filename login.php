@@ -4,6 +4,7 @@ requireLoginPage($config);
 
 $root = $_SERVER['DOCUMENT_ROOT'] ?? __DIR__;
 $cssTime = file_exists($root . '/css/styles.css') ? filemtime($root . '/css/styles.css') : 0;
+$ssoError = trim((string) ($_GET['sso_error'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -31,6 +32,9 @@ $cssTime = file_exists($root . '/css/styles.css') ? filemtime($root . '/css/styl
         <label for="login-password">Пароль</label>
         <input type="password" id="login-password" name="password" autocomplete="current-password" required>
       </div>
+      <?php if ($ssoError === '403'): ?>
+      <div class="login-error">403: токен сквозной авторизации недействителен или истек. Авторизуйтесь заново.</div>
+      <?php endif; ?>
       <div id="login-error" class="login-error hidden"></div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Войти</button>

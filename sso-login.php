@@ -4,7 +4,7 @@ require __DIR__ . '/sso.inc.php';
 
 function redirectToMapLogin()
 {
-    header('Location: /login');
+    header('Location: /login?sso_error=403');
     exit;
 }
 
