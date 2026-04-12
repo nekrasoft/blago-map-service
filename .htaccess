@@ -12,6 +12,12 @@ RewriteRule ^ https://map.blagokirov.ru%{REQUEST_URI} [R=301,L]
 # /login → login.php
 RewriteRule ^login$ login.php [L]
 
+# /sso-login → sso-login.php
+RewriteRule ^sso-login$ sso-login.php [L,QSA]
+
+# /sso-cp → sso-cp.php
+RewriteRule ^sso-cp$ sso-cp.php [L,QSA]
+
 # /api/config → api.php?route=config
 RewriteRule ^api/config$ api.php?route=config [L,QSA]
 
@@ -39,6 +45,10 @@ RewriteRule ^api/counterparties$ api.php?route=counterparties [L,QSA]
     Deny from all
 </Files>
 <Files "auth.inc.php">
+    Order allow,deny
+    Deny from all
+</Files>
+<Files "sso.inc.php">
     Order allow,deny
     Deny from all
 </Files>

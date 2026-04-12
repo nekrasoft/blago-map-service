@@ -34,7 +34,12 @@ if ($isCounterpartyUser) {
         <span id="auth-user" class="auth-user"><?= htmlspecialchars($_SESSION['user'] ?? '') ?></span>
         <span class="auth-role <?= htmlspecialchars($roleClass) ?>"><?= htmlspecialchars($roleLabel) ?></span>
       </div>
-      <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
+      <div class="auth-actions">
+        <?php if ($isCounterpartyUser): ?>
+        <a id="btn-go-cp" class="btn btn-secondary" href="/sso-cp" title="Перейти в биллинг">Биллинг</a>
+        <?php endif; ?>
+        <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
+      </div>
     </div>
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>

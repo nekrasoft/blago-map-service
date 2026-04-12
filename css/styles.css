@@ -103,6 +103,12 @@ body.sidebar-hidden .sidebar-toggle {
   color: #5c6573;
 }
 
+.sidebar-auth .auth-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sidebar-header {
   padding: 20px;
   display: flex;

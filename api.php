@@ -1413,6 +1413,7 @@ if ($route === 'login' && $method === 'POST') {
     }
 
     $counterpartyId = null;
+    $counterpartyUserId = null;
     $districtScope = null;
     $readonly = false;
     $hash = $config['users'][$login] ?? null;
@@ -1445,6 +1446,8 @@ if ($route === 'login' && $method === 'POST') {
             jsonResponse(['error' => 'Учётная запись не привязана к контрагенту'], 403);
         }
 
+        $counterpartyUserId = (int) ($counterpartyUser['id'] ?? 0);
+
         $districtScope = array_key_exists('district_scope', $counterpartyUser)
             ? trim((string) ($counterpartyUser['district_scope'] ?? ''))
             : '';
@@ -1459,6 +1462,11 @@ if ($route === 'login' && $method === 'POST') {
 
     if ($counterpartyId !== null && $counterpartyId > 0) {
         $_SESSION['counterparty_id'] = $counterpartyId;
+        if ($counterpartyUserId !== null && $counterpartyUserId > 0) {
+            $_SESSION['counterparty_user_id'] = $counterpartyUserId;
+        } else {
+            unset($_SESSION['counterparty_user_id']);
+        }
 
         if ($districtScope !== null) {
             $_SESSION['counterparty_district_scope'] = $districtScope;
@@ -1467,6 +1475,7 @@ if ($route === 'login' && $method === 'POST') {
         }
     } else {
         unset($_SESSION['counterparty_id']);
+        unset($_SESSION['counterparty_user_id']);
         unset($_SESSION['counterparty_district_scope']);
         $counterpartyId = null;
         $districtScope = null;
