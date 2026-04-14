@@ -41,7 +41,7 @@ if ($isCounterpartyUser) {
     <div class="sidebar-header">
       <h1>Бункеры <span id="bunker-count" class="count-badge"></span></h1>
       <?php if ($isCounterpartyUser): ?>
-      <a id="btn-go-cp" class="btn btn-secondary" href="/sso-cp" target="_blank" rel="noopener noreferrer" title="Перейти в биллинг">Биллинг</a>
+      <a id="btn-go-cp" class="btn btn-secondary" style="text-decoration: none;" href="/sso-cp" target="_blank" rel="noopener noreferrer" title="Перейти в биллинг">Биллинг ↗</a>
       <?php endif; ?>
       <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
       <button id="btn-add" class="btn btn-primary" title="Добавить бункер">+ Добавить</button>
