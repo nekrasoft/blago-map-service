@@ -12,6 +12,8 @@ $ssoError = trim((string) ($_GET['sso_error'] ?? ''));
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Вход — БлагоСервис</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="stylesheet" href="/css/styles.css?v=<?= $cssTime ?>">
   <style>
     body.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f5f5f5; }

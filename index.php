@@ -23,6 +23,8 @@ if ($isCounterpartyUser) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Карта бункеров — БлагоСервис</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="stylesheet" href="/css/styles.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/styles.css') ?>">
 </head>
 <body>
