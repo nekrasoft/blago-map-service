@@ -727,6 +727,40 @@ SQL;
     $initialized = true;
 }
 
+function initBunkerFillRequestsTable($pdo)
+{
+    static $initialized = false;
+
+    if ($initialized) {
+        return;
+    }
+
+    $sql = <<<SQL
+CREATE TABLE IF NOT EXISTS bunker_fill_requests (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    bunker_id VARCHAR(64) NOT NULL,
+    bunker_number INT NOT NULL DEFAULT 0,
+    counterparty_id INT NULL,
+    contractor VARCHAR(255) NOT NULL DEFAULT '',
+    district VARCHAR(255) NOT NULL DEFAULT '',
+    address VARCHAR(255) NOT NULL DEFAULT '',
+    waste_type VARCHAR(100) NOT NULL DEFAULT 'КГО',
+    fill_level INT NOT NULL DEFAULT 100,
+    filled_by VARCHAR(255) NOT NULL DEFAULT '',
+    filled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_bunker_fill_requests_bunker_id (bunker_id),
+    KEY idx_bunker_fill_requests_filled_at (filled_at),
+    KEY idx_bunker_fill_requests_counterparty_id (counterparty_id),
+    KEY idx_bunker_fill_requests_bunker_filled_at (bunker_id, filled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL;
+
+    $pdo->exec($sql);
+    $initialized = true;
+}
+
 function tableExists($pdo, $tableName)
 {
     $stmt = $pdo->prepare(
@@ -1011,6 +1045,7 @@ function getBunkersDb($legacyFile)
 
     if (!$ready) {
         initBunkersTable($pdo);
+        initBunkerFillRequestsTable($pdo);
         migrateLegacyJsonIfNeeded($pdo, $legacyFile);
         ensureBunkersCounterpartyRelation($pdo);
         ensureBunkersFillMarkColumns($pdo);
@@ -1352,20 +1387,63 @@ function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
         $fillLevel = 100;
     }
 
-    $stmt = $pdo->prepare(
-        'UPDATE bunkers
-         SET fill_level = :fillLevel,
-             last_filled_at = NOW(),
-             last_filled_by = :filledBy
-         WHERE id = :id'
-    );
-    $stmt->execute([
-        'id' => $id,
-        'fillLevel' => $fillLevel,
-        'filledBy' => (string) $filledBy,
-    ]);
+    try {
+        $pdo->beginTransaction();
 
-    return getBunkerById($pdo, $id);
+        $filledAtRaw = $pdo->query('SELECT NOW()')->fetchColumn();
+        $filledAt = is_string($filledAtRaw) && $filledAtRaw !== ''
+            ? $filledAtRaw
+            : date('Y-m-d H:i:s');
+
+        $stmt = $pdo->prepare(
+            'UPDATE bunkers
+             SET fill_level = :fillLevel,
+                 last_filled_at = :filledAt,
+                 last_filled_by = :filledBy
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'id' => $id,
+            'fillLevel' => $fillLevel,
+            'filledAt' => $filledAt,
+            'filledBy' => (string) $filledBy,
+        ]);
+
+        $updated = getBunkerById($pdo, $id);
+        if (!$updated) {
+            $pdo->rollBack();
+            return null;
+        }
+
+        $historyStmt = $pdo->prepare(
+            'INSERT INTO bunker_fill_requests
+             (bunker_id, bunker_number, counterparty_id, contractor, district, address, waste_type, fill_level, filled_by, filled_at)
+             VALUES
+             (:bunkerId, :bunkerNumber, :counterpartyId, :contractor, :district, :address, :wasteType, :fillLevel, :filledBy, :filledAt)'
+        );
+        $historyStmt->execute([
+            'bunkerId' => (string) ($updated['id'] ?? $id),
+            'bunkerNumber' => (int) ($updated['number'] ?? 0),
+            'counterpartyId' => array_key_exists('counterpartyId', $updated) && $updated['counterpartyId'] !== null
+                ? (int) $updated['counterpartyId']
+                : null,
+            'contractor' => (string) ($updated['contractor'] ?? ''),
+            'district' => (string) ($updated['district'] ?? ''),
+            'address' => normalizeAddress($updated['address'] ?? ''),
+            'wasteType' => (string) ($updated['wasteType'] ?? 'КГО'),
+            'fillLevel' => $fillLevel,
+            'filledBy' => (string) $filledBy,
+            'filledAt' => $filledAt,
+        ]);
+
+        $pdo->commit();
+        return $updated;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 function deleteBunkerById($pdo, $id)
