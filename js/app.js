@@ -47,6 +47,11 @@ function displayNumber(num) {
   return num ? '№' + num : 'б/н';
 }
 
+function shouldSyncAddress() {
+  const syncAddress = document.getElementById('sync-address');
+  return !syncAddress || syncAddress.checked;
+}
+
 // ===== Загрузка API Яндекс.Карт и инициализация =====
 
 (async function bootstrap() {
@@ -215,17 +220,24 @@ function renderMarkers() {
     if (canManageBunkers) {
       pm.events.add('dragend', function () {
         const coords = pm.geometry.getCoordinates();
-        ymaps.geocode(coords, { results: 1 }).then(function (res) {
-          const firstGeoObject = res.geoObjects.get(0);
-          const newAddress = firstGeoObject
-            ? firstGeoObject.getAddressLine()
-            : bunker.address;
-          return BunkerAPI.update(bunker.id, {
-            lat: coords[0],
-            lng: coords[1],
-            address: newAddress
+        const data = {
+          lat: coords[0],
+          lng: coords[1]
+        };
+        let update;
+        if (shouldSyncAddress()) {
+          update = ymaps.geocode(coords, { results: 1 }).then(function (res) {
+            const firstGeoObject = res.geoObjects.get(0);
+            data.address = firstGeoObject
+              ? firstGeoObject.getAddressLine()
+              : bunker.address;
+            return BunkerAPI.update(bunker.id, data);
           });
-        }).then(updated => {
+        } else {
+          update = BunkerAPI.update(bunker.id, data);
+        }
+
+        update.then(updated => {
           bunker.lat = updated.lat;
           bunker.lng = updated.lng;
           bunker.address = updated.address;
