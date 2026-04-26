@@ -96,7 +96,7 @@ if ($isCounterpartyUser) {
           <div class="form-row-header">
             <label for="form-address">Адрес</label>
             <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
-            <label class="form-checkbox"><input type="checkbox" id="sync-address" checked> Синхронизировать адрес с координатами</label>
+            <label class="form-checkbox"><input type="checkbox" id="sync-address" checked> Синхронизировать с координатами</label>
             <?php endif; ?>
           </div>
           <input type="text" id="form-address">
