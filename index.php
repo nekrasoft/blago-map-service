@@ -60,9 +60,6 @@ if ($isCounterpartyUser) {
       </select>
       <?php endif; ?>
       <label class="filter-checkbox"><input type="checkbox" id="filter-full"> Заполненные</label>
-      <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
-      <label class="filter-checkbox"><input type="checkbox" id="sync-address" checked> Синхронизировать адрес</label>
-      <?php endif; ?>
     </div>
 
     <ul id="bunker-list"></ul>
@@ -96,7 +93,12 @@ if ($isCounterpartyUser) {
           </select>
         </div>
         <div class="form-row">
-          <label for="form-address">Адрес</label>
+          <div class="form-row-header">
+            <label for="form-address">Адрес</label>
+            <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
+            <label class="form-checkbox"><input type="checkbox" id="sync-address" checked> Sync</label>
+            <?php endif; ?>
+          </div>
           <input type="text" id="form-address">
         </div>
         <div class="form-row">

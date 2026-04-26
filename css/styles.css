@@ -362,6 +362,27 @@ body.sidebar-hidden .sidebar-toggle {
   margin-bottom: 4px;
 }
 
+.form-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.form-row-header label {
+  margin-bottom: 0;
+}
+
+.form-row .form-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .form-row input,
 .form-row select {
   width: 100%;
@@ -371,6 +392,13 @@ body.sidebar-hidden .sidebar-toggle {
   font-size: 0.9rem;
   outline: none;
   transition: border-color 0.2s;
+}
+
+.form-row .form-checkbox input {
+  width: auto;
+  padding: 0;
+  border: 0;
+  accent-color: #4361ee;
 }
 
 .form-row input:focus,

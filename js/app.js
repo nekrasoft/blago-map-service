@@ -468,6 +468,11 @@ function closeModal() {
   document.getElementById('form-id').value = '';
 }
 
+function resetSyncAddress() {
+  const syncAddress = document.getElementById('sync-address');
+  if (syncAddress) syncAddress.checked = true;
+}
+
 async function openCreateForm() {
   if (!canManageBunkers) {
     alert('Недостаточно прав для создания бункера');
@@ -481,6 +486,7 @@ async function openCreateForm() {
   document.getElementById('form-fill').value = 0;
   document.getElementById('form-pickup-date').value = new Date().toISOString().slice(0, 10);
   formOriginalAddress = '';
+  resetSyncAddress();
 
   const center = map.getCenter();
   document.getElementById('form-lat').value = center[0].toFixed(4);
@@ -512,6 +518,7 @@ async function editBunker(id) {
   document.getElementById('form-phone').value = b.contactPhone;
   document.getElementById('form-lat').value = b.lat;
   document.getElementById('form-lng').value = b.lng;
+  resetSyncAddress();
 }
 
 async function deleteBunker(id) {
