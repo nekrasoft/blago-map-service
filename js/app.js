@@ -610,7 +610,7 @@ async function handleFormSubmit(e) {
   let lat = parseFloat(document.getElementById('form-lat').value);
   let lng = parseFloat(document.getElementById('form-lng').value);
 
-  if (addressInput && addressInput !== formOriginalAddress) {
+  if (shouldSyncAddress() && addressInput && addressInput !== formOriginalAddress) {
     try {
       const geo = await geocodeAddress(addressInput);
       if (geo) {
@@ -691,6 +691,8 @@ let formOriginalAddress = '';
 async function handleAddressKeydown(e) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
+
+  if (!shouldSyncAddress()) return;
 
   const input = document.getElementById('form-address');
   const newAddress = input.value.trim();
