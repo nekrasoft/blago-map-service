@@ -1655,7 +1655,8 @@ if ($route === 'bunkers') {
 
             ensureCounterpartyCanAccessBunker($bunker, $sessionCounterpartyId, $sessionDistrictScopeTokens);
 
-            $filledBy = isBotAuthed($config)
+            $isBotRequest = isBotAuthed($config);
+            $filledBy = $isBotRequest
                 ? 'bot'
                 : (string) ($_SESSION['user'] ?? 'unknown');
 
@@ -1664,10 +1665,12 @@ if ($route === 'bunkers') {
                 jsonResponse(['error' => 'Бункер не найден'], 404);
             }
 
-            $maxMessage = buildMaxMarkFilledMessage($updated, $filledBy);
-            $maxResult = sendMaxChatMessage($config, $maxMessage);
-            if (!empty($maxResult['enabled'])) {
-                $updated['maxNotificationSent'] = !empty($maxResult['sent']);
+            if (!$isBotRequest) {
+                $maxMessage = buildMaxMarkFilledMessage($updated, $filledBy);
+                $maxResult = sendMaxChatMessage($config, $maxMessage);
+                if (!empty($maxResult['enabled'])) {
+                    $updated['maxNotificationSent'] = !empty($maxResult['sent']);
+                }
             }
 
             jsonResponse($updated);
