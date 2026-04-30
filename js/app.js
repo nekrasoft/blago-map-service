@@ -330,27 +330,55 @@ function buildBalloonFooter(b) {
 
 // ===== Список бункеров в сайдбаре =====
 
+function compareSidebarBunkers(collator, a, b) {
+  const contractorA = (a.contractor || '').trim();
+  const contractorB = (b.contractor || '').trim();
+  const contractorCmp = collator.compare(contractorA, contractorB);
+  if (contractorCmp !== 0) return contractorCmp;
+
+  const districtA = (a.district || '').trim();
+  const districtB = (b.district || '').trim();
+  const districtCmp = collator.compare(districtA, districtB);
+  if (districtCmp !== 0) return districtCmp;
+
+  const numA = Number(a.number) || 0;
+  const numB = Number(b.number) || 0;
+  if (numA !== numB) return numA - numB;
+
+  return collator.compare(String(a.id || ''), String(b.id || ''));
+}
+
+function getFilledAtTime(bunker) {
+  if (!bunker || !bunker.filledAt) return null;
+
+  const value = String(bunker.filledAt).trim();
+  const timestamp = Date.parse(value.includes('T') ? value : value.replace(' ', 'T'));
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function compareFilledSidebarBunkers(collator, a, b) {
+  const filledAtA = getFilledAtTime(a);
+  const filledAtB = getFilledAtTime(b);
+
+  if (filledAtA !== null && filledAtB !== null && filledAtA !== filledAtB) {
+    return filledAtA - filledAtB;
+  }
+  if (filledAtA !== null && filledAtB === null) return -1;
+  if (filledAtA === null && filledAtB !== null) return 1;
+
+  return compareSidebarBunkers(collator, a, b);
+}
+
 function renderList() {
   const list = document.getElementById('bunker-list');
   list.innerHTML = '';
 
   const collator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true });
+  const onlyFull = document.getElementById('filter-full').checked;
   const sortedForSidebar = allBunkers.slice().sort(function (a, b) {
-    const contractorA = (a.contractor || '').trim();
-    const contractorB = (b.contractor || '').trim();
-    const contractorCmp = collator.compare(contractorA, contractorB);
-    if (contractorCmp !== 0) return contractorCmp;
-
-    const districtA = (a.district || '').trim();
-    const districtB = (b.district || '').trim();
-    const districtCmp = collator.compare(districtA, districtB);
-    if (districtCmp !== 0) return districtCmp;
-
-    const numA = Number(a.number) || 0;
-    const numB = Number(b.number) || 0;
-    if (numA !== numB) return numA - numB;
-
-    return collator.compare(String(a.id || ''), String(b.id || ''));
+    return onlyFull
+      ? compareFilledSidebarBunkers(collator, a, b)
+      : compareSidebarBunkers(collator, a, b);
   });
 
   sortedForSidebar.forEach(b => {
