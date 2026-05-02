@@ -43,6 +43,21 @@ function formatDateTime(dateStr) {
   return d.toLocaleString('ru-RU');
 }
 
+function formatSidebarFilledAt(dateStr) {
+  if (!dateStr) return '';
+
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr);
+
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 function displayNumber(num) {
   return num ? '№' + num : 'б/н';
 }
@@ -385,12 +400,16 @@ function renderList() {
     const cls = getFillClass(b.fillLevel);
     const label = displayNumber(b.number);
     const location = (b.district && b.district.trim()) || (b.address && b.address.trim()) || '—';
+    const filledAt = onlyFull && b.filledAt ? formatSidebarFilledAt(b.filledAt) : '';
     const li = document.createElement('li');
     li.innerHTML =
       '<span class="bunker-indicator indicator-' + cls + '"></span>' +
       '<div class="bunker-info">' +
         '<div class="bunker-number">' + label + ' <span style="font-weight:400;color:#888;font-size:0.8rem">' + (b.contractor || '') + '</span></div>' +
-        '<div class="bunker-address">' + location + '</div>' +
+        '<div class="bunker-address">' +
+          '<span class="bunker-location">' + location + '</span>' +
+          (filledAt ? '<span class="bunker-filled-at">заполнен: ' + filledAt + '</span>' : '') +
+        '</div>' +
       '</div>' +
       '<span class="bunker-fill-badge fill-' + cls + '">' + b.fillLevel + '%</span>';
 

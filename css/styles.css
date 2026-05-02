@@ -215,11 +215,26 @@ body.sidebar-hidden .sidebar-toggle {
 }
 
 .bunker-address {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 0.8rem;
   color: #666;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.bunker-location {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.bunker-filled-at {
+  flex-shrink: 0;
+  color: #b04732;
+  font-style: italic;
 }
 
 .bunker-fill-badge {
