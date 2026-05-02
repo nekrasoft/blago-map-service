@@ -748,10 +748,12 @@ CREATE TABLE IF NOT EXISTS bunker_fill_requests (
     fill_level INT NOT NULL DEFAULT 100,
     filled_by VARCHAR(255) NOT NULL DEFAULT '',
     filled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    executed_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_bunker_fill_requests_bunker_id (bunker_id),
     KEY idx_bunker_fill_requests_filled_at (filled_at),
+    KEY idx_bunker_fill_requests_executed_at (executed_at),
     KEY idx_bunker_fill_requests_counterparty_id (counterparty_id),
     KEY idx_bunker_fill_requests_bunker_filled_at (bunker_id, filled_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -949,6 +951,25 @@ function ensureBunkersFillMarkColumns($pdo)
     $ensured = true;
 }
 
+function ensureBunkerFillRequestsExecutionColumn($pdo)
+{
+    static $ensured = false;
+
+    if ($ensured) {
+        return;
+    }
+
+    if (!columnExists($pdo, 'bunker_fill_requests', 'executed_at')) {
+        $pdo->exec('ALTER TABLE bunker_fill_requests ADD COLUMN executed_at DATETIME NULL AFTER filled_at');
+    }
+
+    if (!indexExists($pdo, 'bunker_fill_requests', 'idx_bunker_fill_requests_executed_at')) {
+        $pdo->exec('ALTER TABLE bunker_fill_requests ADD INDEX idx_bunker_fill_requests_executed_at (executed_at)');
+    }
+
+    $ensured = true;
+}
+
 function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
 {
     static $migrated = false;
@@ -1049,6 +1070,7 @@ function getBunkersDb($legacyFile)
         migrateLegacyJsonIfNeeded($pdo, $legacyFile);
         ensureBunkersCounterpartyRelation($pdo);
         ensureBunkersFillMarkColumns($pdo);
+        ensureBunkerFillRequestsExecutionColumn($pdo);
         $ready = true;
     }
 
@@ -1297,6 +1319,7 @@ function updateBunker($pdo, $id, $body)
 
     $set = [];
     $params = ['id' => $id];
+    $shouldMarkFillRequestExecuted = array_key_exists('fillLevel', $body) && (int) $body['fillLevel'] === 0;
 
     foreach ($fieldMap as $apiField => $meta) {
         if (!array_key_exists($apiField, $body)) {
@@ -1375,7 +1398,41 @@ function updateBunker($pdo, $id, $body)
         $stmt->execute($params);
     }
 
-    return getBunkerById($pdo, $id);
+    $updated = getBunkerById($pdo, $id);
+
+    if ($updated && $shouldMarkFillRequestExecuted) {
+        markLatestBunkerFillRequestExecuted($pdo, $id);
+    }
+
+    return $updated;
+}
+
+function markLatestBunkerFillRequestExecuted($pdo, $bunkerId)
+{
+    $stmt = $pdo->prepare(
+        'SELECT id
+         FROM bunker_fill_requests
+         WHERE bunker_id = :bunkerId
+           AND executed_at IS NULL
+         ORDER BY filled_at DESC, id DESC
+         LIMIT 1'
+    );
+    $stmt->execute(['bunkerId' => (string) $bunkerId]);
+    $requestId = $stmt->fetchColumn();
+
+    if ($requestId === false) {
+        return 0;
+    }
+
+    $updateStmt = $pdo->prepare(
+        'UPDATE bunker_fill_requests
+         SET executed_at = NOW()
+         WHERE id = :id
+           AND executed_at IS NULL'
+    );
+    $updateStmt->execute(['id' => (int) $requestId]);
+
+    return $updateStmt->rowCount();
 }
 
 function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
