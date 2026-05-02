@@ -513,12 +513,27 @@ body.sidebar-hidden .sidebar-toggle {
 /* ===== Мобильные устройства ===== */
 
 @media (max-width: 768px) {
+  body,
+  #map {
+    height: 100dvh;
+  }
+
   #sidebar {
     width: 85%;
     min-width: 280px;
+    height: 100dvh;
+    max-height: 100dvh;
     position: fixed;
     left: 0;
     top: 0;
+  }
+
+  #bunker-list {
+    padding-bottom: 88px;
+    scroll-padding-bottom: 88px;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
   }
 
   .sidebar-toggle {
