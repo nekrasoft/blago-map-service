@@ -408,7 +408,7 @@ function renderList() {
         '<div class="bunker-number">' + label + ' <span style="font-weight:400;color:#888;font-size:0.8rem">' + (b.contractor || '') + '</span></div>' +
         '<div class="bunker-address">' +
           '<span class="bunker-location">' + location + '</span>' +
-          (filledAt ? '<span class="bunker-filled-at">заполнен: ' + filledAt + '</span>' : '') +
+          (filledAt ? '<span class="bunker-filled-at">' + filledAt + '</span>' : '') +
         '</div>' +
       '</div>' +
       '<span class="bunker-fill-badge fill-' + cls + '">' + b.fillLevel + '%</span>';
