@@ -517,7 +517,7 @@ function closeModal() {
 
 function resetSyncAddress() {
   const syncAddress = document.getElementById('sync-address');
-  if (syncAddress) syncAddress.checked = true;
+  if (syncAddress) syncAddress.checked = false;
 }
 
 async function openCreateForm() {
