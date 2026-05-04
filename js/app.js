@@ -195,7 +195,7 @@ async function loadBunkers(filters, options) {
   try {
     allBunkers = await BunkerAPI.getAll(filters || getCurrentFilters());
     if (document.getElementById('filter-full').checked) {
-      allBunkers = allBunkers.filter(b => b.fillLevel > 70);
+      allBunkers = allBunkers.filter(b => Number(b.fillLevel) === 100);
     }
     renderMarkers();
     renderList();
