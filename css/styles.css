@@ -434,30 +434,39 @@ body.sidebar-hidden .sidebar-toggle {
 /* ===== Цвета заполненности ===== */
 
 .fill-green {
-  background: #2ecc71;
+  background: #12b76a;
   color: #fff;
 }
 
-.fill-yellow {
-  background: #f39c12;
+.fill-blue {
+  background: #0ba5ec;
+  color: #fff;
+}
+
+.fill-orange {
+  background: #f79009;
   color: #fff;
 }
 
 .fill-red {
-  background: #e74c3c;
+  background: #f04438;
   color: #fff;
 }
 
 .indicator-green {
-  background: #2ecc71;
+  background: #12b76a;
 }
 
-.indicator-yellow {
-  background: #f39c12;
+.indicator-blue {
+  background: #0ba5ec;
+}
+
+.indicator-orange {
+  background: #f79009;
 }
 
 .indicator-red {
-  background: #e74c3c;
+  background: #f04438;
 }
 
 /* ===== Balloon (popup) на карте ===== */

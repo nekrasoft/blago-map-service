@@ -19,15 +19,19 @@ const DEFAULT_ZOOM = 13;
 // ===== Утилиты =====
 
 function getFillColor(level) {
-  if (level <= 30) return '#2ecc71';
-  if (level <= 70) return '#f39c12';
-  return '#e74c3c';
+  const normalizedLevel = Number(level) || 0;
+  if (normalizedLevel >= 100) return '#f04438';
+  if (normalizedLevel >= 70) return '#f79009';
+  if (normalizedLevel >= 50) return '#0ba5ec';
+  return '#12b76a';
 }
 
 function getFillClass(level) {
-  if (level <= 30) return 'green';
-  if (level <= 70) return 'yellow';
-  return 'red';
+  const normalizedLevel = Number(level) || 0;
+  if (normalizedLevel >= 100) return 'red';
+  if (normalizedLevel >= 70) return 'orange';
+  if (normalizedLevel >= 50) return 'blue';
+  return 'green';
 }
 
 function formatDate(dateStr) {
