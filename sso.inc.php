@@ -1,5 +1,9 @@
 <?php
 
+if (!defined('MAP_DEMO_DB_SESSION_KEY')) {
+    define('MAP_DEMO_DB_SESSION_KEY', 'counterparty_uses_demo_database');
+}
+
 function getSsoSecret()
 {
     return trim((string) (getenv('CROSS_SERVICE_SSO_SECRET') ?: ''));
@@ -122,6 +126,40 @@ function getSsoMysqlConnection()
     return $pdo;
 }
 
+function ssoColumnExists($pdo, $tableName, $columnName)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = :tableName
+           AND column_name = :columnName'
+    );
+    $stmt->execute([
+        'tableName' => $tableName,
+        'columnName' => $columnName,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function ssoIndexExists($pdo, $tableName, $indexName)
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM information_schema.statistics
+         WHERE table_schema = DATABASE()
+           AND table_name = :tableName
+           AND index_name = :indexName'
+    );
+    $stmt->execute([
+        'tableName' => $tableName,
+        'indexName' => $indexName,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
 function ensureCounterpartyUsersTableSso($pdo)
 {
     static $ensured = false;
@@ -138,17 +176,36 @@ CREATE TABLE IF NOT EXISTS counterparty_users (
     counterparty_id INT UNSIGNED NOT NULL,
     district_scope VARCHAR(255) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    is_demo TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_counterparty_users_login (login),
     KEY idx_counterparty_users_counterparty_id (counterparty_id),
     KEY idx_counterparty_users_district_scope (district_scope),
-    KEY idx_counterparty_users_is_active (is_active)
+    KEY idx_counterparty_users_is_active (is_active),
+    KEY idx_counterparty_users_is_demo (is_demo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 
     $pdo->exec($sql);
+
+    if (!ssoColumnExists($pdo, 'counterparty_users', 'district_scope')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD COLUMN district_scope VARCHAR(255) NULL AFTER counterparty_id');
+    }
+
+    if (!ssoIndexExists($pdo, 'counterparty_users', 'idx_counterparty_users_district_scope')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD INDEX idx_counterparty_users_district_scope (district_scope)');
+    }
+
+    if (!ssoColumnExists($pdo, 'counterparty_users', 'is_demo')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD COLUMN is_demo TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active');
+    }
+
+    if (!ssoIndexExists($pdo, 'counterparty_users', 'idx_counterparty_users_is_demo')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD INDEX idx_counterparty_users_is_demo (is_demo)');
+    }
+
     $ensured = true;
 }
 
@@ -163,7 +220,7 @@ function findActiveCounterpartyUserByIdSso($id)
     ensureCounterpartyUsersTableSso($pdo);
 
     $stmt = $pdo->prepare(
-        'SELECT id, login, counterparty_id, district_scope, is_active
+        'SELECT id, login, counterparty_id, district_scope, is_demo, is_active
          FROM counterparty_users
          WHERE id = :id AND is_active = 1
          LIMIT 1'
@@ -180,6 +237,7 @@ function findActiveCounterpartyUserByIdSso($id)
         'login' => (string) ($row['login'] ?? ''),
         'counterparty_id' => (int) ($row['counterparty_id'] ?? 0),
         'district_scope' => isset($row['district_scope']) ? trim((string) $row['district_scope']) : null,
+        'is_demo' => !empty($row['is_demo']),
     ];
 }
 
@@ -194,7 +252,7 @@ function findActiveCounterpartyUserByLoginSso($login)
     ensureCounterpartyUsersTableSso($pdo);
 
     $stmt = $pdo->prepare(
-        'SELECT id, login, counterparty_id, district_scope, is_active
+        'SELECT id, login, counterparty_id, district_scope, is_demo, is_active
          FROM counterparty_users
          WHERE login = :login AND is_active = 1
          LIMIT 1'
@@ -211,5 +269,6 @@ function findActiveCounterpartyUserByLoginSso($login)
         'login' => (string) ($row['login'] ?? ''),
         'counterparty_id' => (int) ($row['counterparty_id'] ?? 0),
         'district_scope' => isset($row['district_scope']) ? trim((string) $row['district_scope']) : null,
+        'is_demo' => !empty($row['is_demo']),
     ];
 }

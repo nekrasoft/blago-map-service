@@ -30,6 +30,7 @@ if (!$counterpartyUser || (int) ($counterpartyUser['counterparty_id'] ?? 0) !== 
     header('Location: /');
     exit;
 }
+$_SESSION[MAP_DEMO_DB_SESSION_KEY] = !empty($counterpartyUser['is_demo']);
 
 try {
     $token = issueSsoToken(

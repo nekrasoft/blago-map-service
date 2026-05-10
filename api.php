@@ -27,6 +27,10 @@ if (file_exists($envFile)) {
 // --- Конфигурация ---
 $config = file_exists($configFile) ? require $configFile : [];
 
+if (!defined('MAP_DEMO_DB_SESSION_KEY')) {
+    define('MAP_DEMO_DB_SESSION_KEY', 'counterparty_uses_demo_database');
+}
+
 // --- Маршрутизация ---
 $method = $_SERVER['REQUEST_METHOD'];
 $route = isset($_GET['route']) ? trim($_GET['route'], '/') : '';
@@ -250,6 +254,21 @@ function getSessionDistrictScopeRaw()
 function getSessionDistrictScopeTokens()
 {
     return normalizeDistrictScopeTokens(getSessionDistrictScopeRaw());
+}
+
+function sessionUsesDemoDatabase()
+{
+    return !empty($_SESSION[MAP_DEMO_DB_SESSION_KEY]);
+}
+
+function setSessionDemoDatabase($usesDemoDatabase)
+{
+    $_SESSION[MAP_DEMO_DB_SESSION_KEY] = (bool) $usesDemoDatabase;
+}
+
+function clearSessionDemoDatabase()
+{
+    unset($_SESSION[MAP_DEMO_DB_SESSION_KEY]);
 }
 
 function districtMatchesScope($district, $scopeTokens)
@@ -571,12 +590,58 @@ function sendMaxChatMessage($config, $text)
     return ['enabled' => true, 'sent' => $sent, 'statusCode' => $statusCode];
 }
 
-function getMysqlConnection()
+function getMysqlEnv($name, $fallback = '', $allowEmpty = false)
 {
-    static $pdo = null;
+    $value = getenv($name);
+    if ($value === false || (!$allowEmpty && $value === '')) {
+        return $fallback;
+    }
 
-    if ($pdo instanceof PDO) {
-        return $pdo;
+    return $value;
+}
+
+function getMysqlConnectionConfig($mode)
+{
+    if ($mode === 'demo') {
+        $database = trim((string) getMysqlEnv('DEMO_DB_DATABASE', ''));
+        if ($database === '') {
+            throw new RuntimeException('Demo database connection is not configured');
+        }
+
+        return [
+            'host' => getMysqlEnv('DEMO_DB_HOST', getMysqlEnv('MYSQL_HOST', 'localhost')),
+            'port' => getMysqlEnv('DEMO_DB_PORT', getMysqlEnv('MYSQL_PORT', '3306')),
+            'user' => getMysqlEnv('DEMO_DB_USERNAME', getMysqlEnv('DEMO_DB_USER', getMysqlEnv('MYSQL_USER', 'map_service'))),
+            'password' => getenv('DEMO_DB_PASSWORD') === false
+                ? getMysqlEnv('MYSQL_PASSWORD', '', true)
+                : getMysqlEnv('DEMO_DB_PASSWORD', '', true),
+            'database' => $database,
+            'charset' => getMysqlEnv('DEMO_DB_CHARSET', 'utf8mb4'),
+        ];
+    }
+
+    return [
+        'host' => getMysqlEnv('MYSQL_HOST', 'localhost'),
+        'port' => getMysqlEnv('MYSQL_PORT', '3306'),
+        'user' => getMysqlEnv('MYSQL_USER', 'map_service'),
+        'password' => getMysqlEnv('MYSQL_PASSWORD', '', true),
+        'database' => getMysqlEnv('MYSQL_DATABASE', 'map_service'),
+        'charset' => 'utf8mb4',
+    ];
+}
+
+function getCurrentMysqlConnectionMode()
+{
+    return sessionUsesDemoDatabase() ? 'demo' : 'default';
+}
+
+function getMysqlConnection($mode = null)
+{
+    static $connections = [];
+
+    $mode = $mode ?: getCurrentMysqlConnectionMode();
+    if (isset($connections[$mode]) && $connections[$mode] instanceof PDO) {
+        return $connections[$mode];
     }
 
     if (!class_exists('PDO')) {
@@ -586,20 +651,22 @@ function getMysqlConnection()
         throw new RuntimeException('PDO MySQL driver is not installed');
     }
 
-    $host = getenv('MYSQL_HOST') ?: 'localhost';
-    $port = getenv('MYSQL_PORT') ?: '3306';
-    $user = getenv('MYSQL_USER') ?: 'map_service';
-    $password = getenv('MYSQL_PASSWORD') ?: '';
-    $database = getenv('MYSQL_DATABASE') ?: 'map_service';
+    $connectionConfig = getMysqlConnectionConfig($mode);
+    $host = $connectionConfig['host'];
+    $port = $connectionConfig['port'];
+    $user = $connectionConfig['user'];
+    $password = $connectionConfig['password'];
+    $database = $connectionConfig['database'];
+    $charset = $connectionConfig['charset'] ?: 'utf8mb4';
 
-    $dsn = "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4";
-    $pdo = new PDO($dsn, $user, $password, [
+    $dsn = "mysql:host={$host};port={$port};dbname={$database};charset={$charset}";
+    $connections[$mode] = new PDO($dsn, $user, $password, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 
-    return $pdo;
+    return $connections[$mode];
 }
 
 function ensureCounterpartyUsersTable($pdo)
@@ -618,13 +685,15 @@ CREATE TABLE IF NOT EXISTS counterparty_users (
     counterparty_id INT UNSIGNED NOT NULL,
     district_scope VARCHAR(255) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    is_demo TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_counterparty_users_login (login),
     KEY idx_counterparty_users_counterparty_id (counterparty_id),
     KEY idx_counterparty_users_district_scope (district_scope),
-    KEY idx_counterparty_users_is_active (is_active)
+    KEY idx_counterparty_users_is_active (is_active),
+    KEY idx_counterparty_users_is_demo (is_demo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL;
 
@@ -638,12 +707,20 @@ SQL;
         $pdo->exec('ALTER TABLE counterparty_users ADD INDEX idx_counterparty_users_district_scope (district_scope)');
     }
 
+    if (!columnExists($pdo, 'counterparty_users', 'is_demo')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD COLUMN is_demo TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active');
+    }
+
+    if (!indexExists($pdo, 'counterparty_users', 'idx_counterparty_users_is_demo')) {
+        $pdo->exec('ALTER TABLE counterparty_users ADD INDEX idx_counterparty_users_is_demo (is_demo)');
+    }
+
     $ensured = true;
 }
 
 function getAuthDb()
 {
-    $pdo = getMysqlConnection();
+    $pdo = getMysqlConnection('default');
     ensureCounterpartyUsersTable($pdo);
 
     return $pdo;
@@ -663,7 +740,7 @@ function findActiveCounterpartyUserByLogin($pdo, $login)
     }
 
     $stmt = $pdo->prepare(
-        'SELECT id, login, password_hash, counterparty_id, district_scope
+        'SELECT id, login, password_hash, counterparty_id, district_scope, is_demo
          FROM counterparty_users
          WHERE login = :login AND is_active = 1
          LIMIT 1'
@@ -683,14 +760,16 @@ function findActiveCounterpartyUserByLogin($pdo, $login)
         'district_scope' => array_key_exists('district_scope', $row) && $row['district_scope'] !== null
             ? trim((string) $row['district_scope'])
             : null,
+        'is_demo' => !empty($row['is_demo']),
     ];
 }
 
 function initBunkersTable($pdo)
 {
-    static $initialized = false;
+    static $initialized = [];
+    $key = spl_object_id($pdo);
 
-    if ($initialized) {
+    if (!empty($initialized[$key])) {
         return;
     }
 
@@ -724,14 +803,15 @@ CREATE TABLE IF NOT EXISTS bunkers (
 SQL;
 
     $pdo->exec($sql);
-    $initialized = true;
+    $initialized[$key] = true;
 }
 
 function initBunkerFillRequestsTable($pdo)
 {
-    static $initialized = false;
+    static $initialized = [];
+    $key = spl_object_id($pdo);
 
-    if ($initialized) {
+    if (!empty($initialized[$key])) {
         return;
     }
 
@@ -760,7 +840,7 @@ CREATE TABLE IF NOT EXISTS bunker_fill_requests (
 SQL;
 
     $pdo->exec($sql);
-    $initialized = true;
+    $initialized[$key] = true;
 }
 
 function tableExists($pdo, $tableName)
@@ -826,12 +906,13 @@ function hasCounterpartyForeignKey($pdo)
 
 function counterpartiesTableExists($pdo)
 {
-    static $exists = null;
-    if ($exists !== null) {
-        return $exists;
+    static $exists = [];
+    $key = spl_object_id($pdo);
+    if (array_key_exists($key, $exists)) {
+        return $exists[$key];
     }
-    $exists = tableExists($pdo, 'counterparties');
-    return $exists;
+    $exists[$key] = tableExists($pdo, 'counterparties');
+    return $exists[$key];
 }
 
 function findCounterpartyIdByShortName($pdo, $shortName)
@@ -875,9 +956,10 @@ function findCounterpartyShortNameById($pdo, $counterpartyId)
 
 function ensureBunkersCounterpartyRelation($pdo)
 {
-    static $ensured = false;
+    static $ensured = [];
+    $key = spl_object_id($pdo);
 
-    if ($ensured) {
+    if (!empty($ensured[$key])) {
         return;
     }
 
@@ -894,7 +976,7 @@ function ensureBunkersCounterpartyRelation($pdo)
 
     if (!counterpartiesTableExists($pdo)) {
         writeAppLog('warning', 'counterparties_table_missing_for_bunkers_relation');
-        $ensured = true;
+        $ensured[$key] = true;
         return;
     }
 
@@ -929,14 +1011,15 @@ function ensureBunkersCounterpartyRelation($pdo)
         }
     }
 
-    $ensured = true;
+    $ensured[$key] = true;
 }
 
 function ensureBunkersFillMarkColumns($pdo)
 {
-    static $ensured = false;
+    static $ensured = [];
+    $key = spl_object_id($pdo);
 
-    if ($ensured) {
+    if (!empty($ensured[$key])) {
         return;
     }
 
@@ -948,14 +1031,15 @@ function ensureBunkersFillMarkColumns($pdo)
         $pdo->exec('ALTER TABLE bunkers ADD COLUMN last_filled_by VARCHAR(255) NULL AFTER last_filled_at');
     }
 
-    $ensured = true;
+    $ensured[$key] = true;
 }
 
 function ensureBunkerFillRequestsExecutionColumn($pdo)
 {
-    static $ensured = false;
+    static $ensured = [];
+    $key = spl_object_id($pdo);
 
-    if ($ensured) {
+    if (!empty($ensured[$key])) {
         return;
     }
 
@@ -967,26 +1051,27 @@ function ensureBunkerFillRequestsExecutionColumn($pdo)
         $pdo->exec('ALTER TABLE bunker_fill_requests ADD INDEX idx_bunker_fill_requests_executed_at (executed_at)');
     }
 
-    $ensured = true;
+    $ensured[$key] = true;
 }
 
 function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
 {
-    static $migrated = false;
+    static $migrated = [];
+    $key = spl_object_id($pdo);
 
-    if ($migrated) {
+    if (!empty($migrated[$key])) {
         return;
     }
 
     $rowsCount = (int) $pdo->query('SELECT COUNT(*) FROM bunkers')->fetchColumn();
     if ($rowsCount > 0 || !file_exists($legacyFile)) {
-        $migrated = true;
+        $migrated[$key] = true;
         return;
     }
 
     $legacyBunkers = readLegacyBunkers($legacyFile);
     if (!$legacyBunkers) {
-        $migrated = true;
+        $migrated[$key] = true;
         return;
     }
 
@@ -1021,7 +1106,7 @@ function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
         throw $e;
     }
 
-    $migrated = true;
+    $migrated[$key] = true;
 }
 
 function mapBunkerRow($row)
@@ -1061,17 +1146,18 @@ function mapBunkerRow($row)
 
 function getBunkersDb($legacyFile)
 {
-    static $ready = false;
+    static $ready = [];
     $pdo = getMysqlConnection();
+    $key = spl_object_id($pdo);
 
-    if (!$ready) {
+    if (empty($ready[$key])) {
         initBunkersTable($pdo);
         initBunkerFillRequestsTable($pdo);
         migrateLegacyJsonIfNeeded($pdo, $legacyFile);
         ensureBunkersCounterpartyRelation($pdo);
         ensureBunkersFillMarkColumns($pdo);
         ensureBunkerFillRequestsExecutionColumn($pdo);
-        $ready = true;
+        $ready[$key] = true;
     }
 
     return $pdo;
@@ -1530,6 +1616,7 @@ if ($route === 'auth' && $method === 'GET') {
         'counterpartyId' => $counterpartyId,
         'districtScope' => $districtScope,
         'isCounterpartyUser' => $counterpartyId !== null,
+        'usesDemoDatabase' => sessionUsesDemoDatabase(),
     ]);
 }
 
@@ -1551,6 +1638,7 @@ if ($route === 'login' && $method === 'POST') {
     $counterpartyUserId = null;
     $districtScope = null;
     $readonly = false;
+    $usesDemoDatabase = false;
     $hash = $config['users'][$login] ?? null;
 
     if ($hash !== null) {
@@ -1590,10 +1678,13 @@ if ($route === 'login' && $method === 'POST') {
         if ($districtScope === '') {
             $districtScope = null;
         }
+
+        $usesDemoDatabase = !empty($counterpartyUser['is_demo']);
     }
 
     $_SESSION['user'] = $login;
     $_SESSION['readonly'] = $readonly;
+    setSessionDemoDatabase($usesDemoDatabase);
 
     if ($counterpartyId !== null && $counterpartyId > 0) {
         $_SESSION['counterparty_id'] = $counterpartyId;
@@ -1612,6 +1703,7 @@ if ($route === 'login' && $method === 'POST') {
         unset($_SESSION['counterparty_id']);
         unset($_SESSION['counterparty_user_id']);
         unset($_SESSION['counterparty_district_scope']);
+        clearSessionDemoDatabase();
         $counterpartyId = null;
         $districtScope = null;
     }
@@ -1622,6 +1714,7 @@ if ($route === 'login' && $method === 'POST') {
         'counterpartyId' => $counterpartyId,
         'districtScope' => $districtScope,
         'isCounterpartyUser' => $counterpartyId !== null,
+        'usesDemoDatabase' => sessionUsesDemoDatabase(),
     ]);
 }
 
@@ -1657,17 +1750,21 @@ if ($route === 'bunkers') {
         $pdo = getBunkersDb($legacyDataFile);
     } catch (Throwable $e) {
         logThrowable('mysql_connection_failed', $e, [
+            'connectionMode' => getCurrentMysqlConnectionMode(),
             'mysql' => [
-                'host' => getenv('MYSQL_HOST') ?: 'localhost',
-                'port' => getenv('MYSQL_PORT') ?: '3306',
-                'user' => getenv('MYSQL_USER') ?: 'map_service',
-                'database' => getenv('MYSQL_DATABASE') ?: 'map_service',
-                'passwordLength' => strlen((string) (getenv('MYSQL_PASSWORD') ?: '')),
+                'host' => sessionUsesDemoDatabase() ? (getenv('DEMO_DB_HOST') ?: (getenv('MYSQL_HOST') ?: 'localhost')) : (getenv('MYSQL_HOST') ?: 'localhost'),
+                'port' => sessionUsesDemoDatabase() ? (getenv('DEMO_DB_PORT') ?: (getenv('MYSQL_PORT') ?: '3306')) : (getenv('MYSQL_PORT') ?: '3306'),
+                'user' => sessionUsesDemoDatabase() ? (getenv('DEMO_DB_USERNAME') ?: (getenv('DEMO_DB_USER') ?: (getenv('MYSQL_USER') ?: 'map_service'))) : (getenv('MYSQL_USER') ?: 'map_service'),
+                'database' => sessionUsesDemoDatabase() ? (getenv('DEMO_DB_DATABASE') ?: '') : (getenv('MYSQL_DATABASE') ?: 'map_service'),
+                'passwordLength' => strlen((string) (sessionUsesDemoDatabase() ? (getenv('DEMO_DB_PASSWORD') ?: (getenv('MYSQL_PASSWORD') ?: '')) : (getenv('MYSQL_PASSWORD') ?: ''))),
             ],
             'pdoDrivers' => class_exists('PDO') ? PDO::getAvailableDrivers() : [],
         ]);
         if (strpos($e->getMessage(), 'PDO MySQL driver is not installed') !== false || strpos($e->getMessage(), 'could not find driver') !== false) {
             jsonResponse(['error' => 'Не удалось подключиться к MySQL: в PHP не включен драйвер pdo_mysql'], 500);
+        }
+        if (strpos($e->getMessage(), 'Demo database connection is not configured') !== false) {
+            jsonResponse(['error' => 'Демо-БД не настроена'], 503);
         }
         jsonResponse(['error' => 'Не удалось подключиться к MySQL'], 500);
     }

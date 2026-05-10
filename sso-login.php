@@ -36,6 +36,7 @@ try {
     $_SESSION['readonly'] = false;
     $_SESSION['counterparty_id'] = $counterpartyId;
     $_SESSION['counterparty_user_id'] = (int) ($counterpartyUser['id'] ?? 0);
+    $_SESSION[MAP_DEMO_DB_SESSION_KEY] = !empty($counterpartyUser['is_demo']);
 
     $districtScope = trim((string) ($counterpartyUser['district_scope'] ?? ''));
     if ($districtScope !== '') {

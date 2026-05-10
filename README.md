@@ -43,6 +43,7 @@
 6. Заполните в `.env`:
    - `YANDEX_MAPS_API_KEY`
    - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
+   - `DEMO_DB_HOST`, `DEMO_DB_PORT`, `DEMO_DB_DATABASE`, `DEMO_DB_USERNAME`, `DEMO_DB_PASSWORD` (опционально; для пользователей-контрагентов с `is_demo = 1`)
    - `ADMIN_PASSWORD_HASH` (и опционально demo-учётку)
    - `MAP_BOT_API_KEY` (опционально, бот-запись для `mark-filled`)
    - `MAP_BOT_READ_API_KEY` (опционально, read-only доступ бота к `GET /api/bunkers` и `GET /api/counterparties`)
@@ -58,6 +59,7 @@
    - `counterparty_id` — ID контрагента из `counterparties.id`
    - `district_scope` — опциональный фильтр районов (одно или несколько значений через запятую, например `Инноград, Знак`)
    - `is_active` — активность учётки
+   - `is_demo` — переключает рабочие данные карты на демо-БД из `DEMO_DB_*`
 9. Если нужен legacy-источник для первого запуска, оставьте `data/bunkers.json` рядом с проектом.
    ```bash
    chmod 644 data/bunkers.json
