@@ -1819,7 +1819,7 @@ if ($route === 'bunkers') {
                 jsonResponse(['error' => 'Бункер не найден'], 404);
             }
 
-            if (!$isBotRequest) {
+            if (!$isBotRequest && !sessionUsesDemoDatabase()) {
                 $maxMessage = buildMaxMarkFilledMessage($updated, $filledBy);
                 $maxResult = sendMaxChatMessage($config, $maxMessage);
                 if (!empty($maxResult['enabled'])) {
