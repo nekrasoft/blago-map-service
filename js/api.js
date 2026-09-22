@@ -85,3 +85,26 @@ const CounterpartyAPI = {
     return res.json();
   }
 };
+
+const FillRequestAPI = {
+  async cancel(id, reasonCode, comment) {
+    const res = await fetch('/api/fill-requests/' + id + '/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reasonCode, comment })
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('auth_required');
+    if (res.status === 403) throw new Error('readonly');
+    if (!res.ok) throw new Error(payload.error || 'Не удалось отменить заявку');
+    return payload;
+  }
+};
+
+const DriverAPI = {
+  async getAll() {
+    const res = await fetch('/api/drivers');
+    if (!res.ok) throw new Error('Не удалось загрузить контакты водителей');
+    return res.json();
+  }
+};

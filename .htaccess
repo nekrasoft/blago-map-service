@@ -39,6 +39,15 @@ RewriteRule ^api/bunkers/(.+)$ api.php?route=bunkers&id=$1 [L,QSA]
 # /api/counterparties → api.php?route=counterparties
 RewriteRule ^api/counterparties$ api.php?route=counterparties [L,QSA]
 
+# /api/drivers → api.php?route=drivers
+RewriteRule ^api/drivers$ api.php?route=drivers [L,QSA]
+
+# /api/pickup-reports → api.php?route=pickup-reports
+RewriteRule ^api/pickup-reports$ api.php?route=pickup-reports [L,QSA]
+
+# /api/fill-requests/{id}/cancel → api.php?route=fill-requests&id={id}/cancel
+RewriteRule ^api/fill-requests/(.+)$ api.php?route=fill-requests&id=$1 [L,QSA]
+
 # Запрет прямого доступа к конфигурации
 <Files "config.php">
     Order allow,deny

@@ -114,7 +114,27 @@ function init() {
   }
   refreshFilterOptions();
   loadBunkers(undefined, { fitToBunkers: true });
+  loadDriverContacts();
   bindEvents();
+}
+
+async function loadDriverContacts() {
+  const container = document.getElementById('driver-contacts');
+  const list = document.getElementById('driver-contacts-list');
+  if (!container || !list) return;
+  try {
+    const drivers = await DriverAPI.getAll();
+    list.replaceChildren();
+    drivers.forEach(function (driver) {
+      const link = document.createElement('a');
+      link.href = 'tel:' + driver.phone;
+      link.textContent = driver.name + ': ' + driver.phone;
+      list.appendChild(link);
+    });
+    container.classList.toggle('hidden', drivers.length === 0);
+  } catch (err) {
+    console.error('Ошибка загрузки контактов водителей:', err);
+  }
 }
 
 async function ensureCounterpartiesLoaded() {
@@ -329,7 +349,7 @@ function buildBalloonFooter(b) {
     if (counterpartyIdScope !== null && Number(b.counterpartyId || 0) !== counterpartyIdScope) {
       return '';
     }
-    const isAlreadyFilled = Number(b.fillLevel) >= 100;
+    const isAlreadyFilled = Boolean(b.pendingRequestId);
     return '' +
       '<div class="balloon-content">' +
         '<div class="balloon-actions">' +
@@ -342,6 +362,7 @@ function buildBalloonFooter(b) {
     '<div class="balloon-content">' +
       '<div class="balloon-actions">' +
         '<button class="btn btn-primary" onclick="editBunker(\'' + b.id + '\')">Редактировать</button>' +
+        (b.pendingRequestId ? '<button class="btn btn-secondary" onclick="openCancelRequest(' + Number(b.pendingRequestId) + ')">Отменить заявку</button>' : '') +
         '<button class="btn btn-danger" onclick="deleteBunker(\'' + b.id + '\')">Удалить</button>' +
       '</div>' +
     '</div>';
@@ -615,7 +636,7 @@ async function markBunkerFilled(id) {
     return;
   }
 
-  if (Number(bunker.fillLevel) >= 100) {
+  if (bunker.pendingRequestId) {
     return;
   }
 
@@ -639,6 +660,48 @@ async function markBunkerFilled(id) {
     }
     console.error('Ошибка отметки заполненности:', err);
     alert(err.message || 'Не удалось отметить бункер заполненным');
+  }
+}
+
+function openCancelRequest(requestId) {
+  const overlay = document.getElementById('cancel-request-overlay');
+  if (!overlay) return;
+  document.getElementById('cancel-request-form').reset();
+  document.getElementById('cancel-request-id').value = String(requestId);
+  document.getElementById('cancel-request-comment-row').classList.add('hidden');
+  document.getElementById('cancel-request-comment').required = false;
+  overlay.classList.remove('hidden');
+}
+
+function closeCancelRequest() {
+  const overlay = document.getElementById('cancel-request-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function toggleCancelRequestComment() {
+  const isOther = document.getElementById('cancel-request-reason').value === 'other';
+  document.getElementById('cancel-request-comment-row').classList.toggle('hidden', !isOther);
+  document.getElementById('cancel-request-comment').required = isOther;
+}
+
+async function handleCancelRequestSubmit(event) {
+  event.preventDefault();
+  const requestId = Number(document.getElementById('cancel-request-id').value);
+  const reasonCode = document.getElementById('cancel-request-reason').value;
+  const comment = document.getElementById('cancel-request-comment').value.trim();
+  if (!confirm('Заявка останется в истории со статусом «Отменена». Продолжить?')) return;
+
+  try {
+    await FillRequestAPI.cancel(requestId, reasonCode, comment);
+    closeCancelRequest();
+    map.balloon.close();
+    await loadBunkers();
+  } catch (err) {
+    if (err.message === 'auth_required') {
+      window.location.href = '/login';
+      return;
+    }
+    alert(err.message || 'Не удалось отменить заявку');
   }
 }
 
@@ -826,6 +889,17 @@ function bindEvents() {
   document.getElementById('modal-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
   });
+
+  const cancelRequestOverlay = document.getElementById('cancel-request-overlay');
+  if (cancelRequestOverlay) {
+    document.getElementById('cancel-request-close').addEventListener('click', closeCancelRequest);
+    document.getElementById('cancel-request-back').addEventListener('click', closeCancelRequest);
+    document.getElementById('cancel-request-reason').addEventListener('change', toggleCancelRequestComment);
+    document.getElementById('cancel-request-form').addEventListener('submit', handleCancelRequestSubmit);
+    cancelRequestOverlay.addEventListener('click', function (e) {
+      if (e.target === this) closeCancelRequest();
+    });
+  }
 
   const sidebar = document.getElementById('sidebar');
   const mapEl = document.getElementById('map');

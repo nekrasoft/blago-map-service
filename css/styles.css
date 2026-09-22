@@ -176,6 +176,19 @@ body.sidebar-hidden .sidebar-toggle {
   accent-color: #e74c3c;
 }
 
+.driver-contacts {
+  padding: 10px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.85rem;
+}
+
+.driver-contacts a {
+  display: block;
+  margin-top: 5px;
+  color: #4361ee;
+  text-decoration: none;
+}
+
 #bunker-list {
   list-style: none;
   flex: 1;
@@ -399,7 +412,8 @@ body.sidebar-hidden .sidebar-toggle {
 }
 
 .form-row input,
-.form-row select {
+.form-row select,
+.form-row textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid #ddd;
@@ -417,7 +431,8 @@ body.sidebar-hidden .sidebar-toggle {
 }
 
 .form-row input:focus,
-.form-row select:focus {
+.form-row select:focus,
+.form-row textarea:focus {
   border-color: #4361ee;
 }
 

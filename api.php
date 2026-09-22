@@ -449,6 +449,22 @@ function requireWriteAuth($config, $allowCounterpartyUser = false)
     }
 }
 
+function requireStaffReadAuth($config)
+{
+    requireAuth($config);
+    if (getSessionCounterpartyId() !== null) {
+        jsonResponse(['error' => 'Недостаточно прав'], 403);
+    }
+}
+
+function requireStaffWriteAuth($config)
+{
+    requireAuth($config);
+    if (!empty($_SESSION['readonly']) || getSessionCounterpartyId() !== null) {
+        jsonResponse(['error' => 'Недостаточно прав'], 403);
+    }
+}
+
 function ensureCounterpartyCanAccessBunker($bunker, $counterpartyId, $districtScopeTokens = [])
 {
     if ($counterpartyId === null) {
@@ -843,6 +859,98 @@ SQL;
     $initialized[$key] = true;
 }
 
+function initBunkerPickupReportsTables($pdo)
+{
+    static $initialized = [];
+    $key = spl_object_id($pdo);
+
+    if (!empty($initialized[$key])) {
+        return;
+    }
+
+    $pdo->exec(<<<SQL
+CREATE TABLE IF NOT EXISTS bunker_pickup_reports (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    counterparty_id INT NULL,
+    contractor VARCHAR(255) NOT NULL DEFAULT '',
+    driver_source VARCHAR(20) NOT NULL,
+    driver_user_id VARCHAR(64) NOT NULL,
+    driver_name VARCHAR(255) NULL,
+    cleanup_status VARCHAR(32) NOT NULL,
+    cleanup_comment VARCHAR(500) NULL,
+    waybill_required TINYINT(1) NOT NULL DEFAULT 0,
+    waybill_missing_reason VARCHAR(500) NULL,
+    billing_units DECIMAL(8,2) NOT NULL,
+    completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_bunker_pickup_reports_completed (completed_at),
+    KEY idx_bunker_pickup_reports_waybill_completed (waybill_required, completed_at),
+    KEY idx_bunker_pickup_reports_counterparty_completed (counterparty_id, completed_at),
+    KEY idx_bunker_pickup_reports_driver (driver_source, driver_user_id, completed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+    $pdo->exec(<<<SQL
+CREATE TABLE IF NOT EXISTS bunker_pickup_items (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    report_id BIGINT UNSIGNED NOT NULL,
+    request_id BIGINT UNSIGNED NOT NULL,
+    bunker_id VARCHAR(64) NOT NULL,
+    bunker_number INT NOT NULL DEFAULT 0,
+    billing_units DECIMAL(5,2) NOT NULL,
+    estimated_volume_m3 DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_bunker_pickup_items_request (request_id),
+    KEY idx_bunker_pickup_items_report (report_id),
+    CONSTRAINT fk_bunker_pickup_items_report
+        FOREIGN KEY (report_id) REFERENCES bunker_pickup_reports(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+    $pdo->exec(<<<SQL
+CREATE TABLE IF NOT EXISTS bunker_pickup_files (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    report_id BIGINT UNSIGNED NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    file_token VARCHAR(64) NULL,
+    file_name VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    file_sha256 CHAR(64) NOT NULL,
+    file_data MEDIUMBLOB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_bunker_pickup_files_report_kind (report_id, kind),
+    UNIQUE KEY uq_bunker_pickup_files_token (file_token),
+    CONSTRAINT fk_bunker_pickup_files_report
+        FOREIGN KEY (report_id) REFERENCES bunker_pickup_reports(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+    $initialized[$key] = true;
+}
+
+function initDriverContactsTable($pdo)
+{
+    $pdo->exec(<<<SQL
+CREATE TABLE IF NOT EXISTS driver_contacts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    phone VARCHAR(32) NOT NULL,
+    source VARCHAR(20) NULL,
+    source_user_id VARCHAR(64) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_driver_contacts_source_user (source, source_user_id),
+    KEY idx_driver_contacts_active_name (is_active, name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+}
+
 function tableExists($pdo, $tableName)
 {
     $stmt = $pdo->prepare(
@@ -1054,6 +1162,46 @@ function ensureBunkerFillRequestsExecutionColumn($pdo)
     $ensured[$key] = true;
 }
 
+function ensureBunkerPickupSchema($pdo)
+{
+    static $ensured = [];
+    $key = spl_object_id($pdo);
+
+    if (!empty($ensured[$key])) {
+        return;
+    }
+
+    $columns = [
+        'cancelled_at' => 'DATETIME NULL AFTER executed_at',
+        'cancellation_reason_code' => 'VARCHAR(64) NULL AFTER cancelled_at',
+        'cancellation_comment' => 'VARCHAR(500) NULL AFTER cancellation_reason_code',
+        'cancelled_by' => 'VARCHAR(255) NULL AFTER cancellation_comment',
+    ];
+    foreach ($columns as $name => $definition) {
+        if (!columnExists($pdo, 'bunker_fill_requests', $name)) {
+            $pdo->exec("ALTER TABLE bunker_fill_requests ADD COLUMN {$name} {$definition}");
+        }
+    }
+
+    if (!indexExists($pdo, 'bunker_fill_requests', 'idx_bunker_fill_requests_pending')) {
+        $pdo->exec(
+            'ALTER TABLE bunker_fill_requests
+             ADD INDEX idx_bunker_fill_requests_pending (bunker_id, executed_at, cancelled_at, filled_at)'
+        );
+    }
+
+    if (counterpartiesTableExists($pdo) && !columnExists($pdo, 'counterparties', 'requires_container_waybill')) {
+        $pdo->exec(
+            'ALTER TABLE counterparties
+             ADD COLUMN requires_container_waybill TINYINT(1) NOT NULL DEFAULT 0 AFTER operation_type'
+        );
+    }
+
+    initBunkerPickupReportsTables($pdo);
+    initDriverContactsTable($pdo);
+    $ensured[$key] = true;
+}
+
 function migrateLegacyJsonIfNeeded($pdo, $legacyFile)
 {
     static $migrated = [];
@@ -1138,6 +1286,10 @@ function mapBunkerRow($row)
         'filledBy' => array_key_exists('filledBy', $row) && $row['filledBy'] !== null && $row['filledBy'] !== ''
             ? (string) $row['filledBy']
             : null,
+        'pendingRequestId' => array_key_exists('pendingRequestId', $row) && $row['pendingRequestId'] !== null
+            ? (int) $row['pendingRequestId']
+            : null,
+        'requiresContainerWaybill' => !empty($row['requiresContainerWaybill']),
         'contactPhone' => (string) ($row['contactPhone'] ?? ''),
         'lat' => (float) ($row['lat'] ?? 0),
         'lng' => (float) ($row['lng'] ?? 0),
@@ -1157,6 +1309,7 @@ function getBunkersDb($legacyFile)
         ensureBunkersCounterpartyRelation($pdo);
         ensureBunkersFillMarkColumns($pdo);
         ensureBunkerFillRequestsExecutionColumn($pdo);
+        ensureBunkerPickupSchema($pdo);
         $ready[$key] = true;
     }
 
@@ -1172,7 +1325,11 @@ function listBunkers($pdo, $filters = [])
                        b.counterparty_id AS counterpartyId,
                        b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
                        b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
-                       b.contact_phone AS contactPhone, b.lat, b.lng
+                       b.contact_phone AS contactPhone, b.lat, b.lng,
+                       c.requires_container_waybill AS requiresContainerWaybill,
+                       (SELECT fr.id FROM bunker_fill_requests fr
+                        WHERE fr.bunker_id = b.id AND fr.executed_at IS NULL AND fr.cancelled_at IS NULL
+                        ORDER BY fr.filled_at DESC, fr.id DESC LIMIT 1) AS pendingRequestId
                 FROM bunkers b
                 LEFT JOIN counterparties c ON c.id = b.counterparty_id';
     } else {
@@ -1181,7 +1338,11 @@ function listBunkers($pdo, $filters = [])
                        b.counterparty_id AS counterpartyId,
                        b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
                        b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
-                       b.contact_phone AS contactPhone, b.lat, b.lng
+                       b.contact_phone AS contactPhone, b.lat, b.lng,
+                       0 AS requiresContainerWaybill,
+                       (SELECT fr.id FROM bunker_fill_requests fr
+                        WHERE fr.bunker_id = b.id AND fr.executed_at IS NULL AND fr.cancelled_at IS NULL
+                        ORDER BY fr.filled_at DESC, fr.id DESC LIMIT 1) AS pendingRequestId
                 FROM bunkers b';
     }
 
@@ -1248,7 +1409,11 @@ function getBunkerById($pdo, $id)
                     b.counterparty_id AS counterpartyId,
                     b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
                     b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
-                    b.contact_phone AS contactPhone, b.lat, b.lng
+                    b.contact_phone AS contactPhone, b.lat, b.lng,
+                    c.requires_container_waybill AS requiresContainerWaybill,
+                    (SELECT fr.id FROM bunker_fill_requests fr
+                     WHERE fr.bunker_id = b.id AND fr.executed_at IS NULL AND fr.cancelled_at IS NULL
+                     ORDER BY fr.filled_at DESC, fr.id DESC LIMIT 1) AS pendingRequestId
              FROM bunkers b
              LEFT JOIN counterparties c ON c.id = b.counterparty_id
              WHERE b.id = :id'
@@ -1260,7 +1425,11 @@ function getBunkerById($pdo, $id)
                     b.counterparty_id AS counterpartyId,
                     b.waste_type AS wasteType, b.last_pickup_date AS lastPickupDate, b.fill_level AS fillLevel,
                     b.last_filled_at AS filledAt, b.last_filled_by AS filledBy,
-                    b.contact_phone AS contactPhone, b.lat, b.lng
+                    b.contact_phone AS contactPhone, b.lat, b.lng,
+                    0 AS requiresContainerWaybill,
+                    (SELECT fr.id FROM bunker_fill_requests fr
+                     WHERE fr.bunker_id = b.id AND fr.executed_at IS NULL AND fr.cancelled_at IS NULL
+                     ORDER BY fr.filled_at DESC, fr.id DESC LIMIT 1) AS pendingRequestId
              FROM bunkers b
              WHERE b.id = :id'
         );
@@ -1284,6 +1453,7 @@ function listCounterparties($pdo)
     $hasSchedule = columnExists($pdo, 'counterparties', 'invoice_schedule');
     $hasOperationType = columnExists($pdo, 'counterparties', 'operation_type');
     $hasStatus = columnExists($pdo, 'counterparties', 'status');
+    $hasWaybillRequirement = columnExists($pdo, 'counterparties', 'requires_container_waybill');
 
     $select = [
         'id',
@@ -1291,6 +1461,7 @@ function listCounterparties($pdo)
         'name',
         $hasSchedule ? 'invoice_schedule AS schedule' : 'NULL AS schedule',
         $hasOperationType ? 'operation_type' : 'NULL AS operation_type',
+        $hasWaybillRequirement ? 'requires_container_waybill AS requiresContainerWaybill' : '0 AS requiresContainerWaybill',
     ];
 
     $sql = 'SELECT ' . implode(', ', $select) . ' FROM counterparties';
@@ -1313,8 +1484,25 @@ function listCounterparties($pdo)
             'operation_type' => array_key_exists('operation_type', $row) && $row['operation_type'] !== null
                 ? (string) $row['operation_type']
                 : null,
+            'requiresContainerWaybill' => !empty($row['requiresContainerWaybill']),
         ];
     }, $rows);
+}
+
+function listDriverContacts($pdo)
+{
+    $stmt = $pdo->query(
+        'SELECT id, name, phone
+         FROM driver_contacts
+         WHERE is_active = 1
+         ORDER BY name, id'
+    );
+
+    return array_map(fn ($row) => [
+        'id' => (int) $row['id'],
+        'name' => (string) $row['name'],
+        'phone' => (string) $row['phone'],
+    ], $stmt->fetchAll());
 }
 
 function createBunker($pdo, $body)
@@ -1405,8 +1593,6 @@ function updateBunker($pdo, $id, $body)
 
     $set = [];
     $params = ['id' => $id];
-    $shouldMarkFillRequestExecuted = array_key_exists('fillLevel', $body) && (int) $body['fillLevel'] === 0;
-
     foreach ($fieldMap as $apiField => $meta) {
         if (!array_key_exists($apiField, $body)) {
             continue;
@@ -1484,13 +1670,7 @@ function updateBunker($pdo, $id, $body)
         $stmt->execute($params);
     }
 
-    $updated = getBunkerById($pdo, $id);
-
-    if ($updated && $shouldMarkFillRequestExecuted) {
-        markLatestBunkerFillRequestExecuted($pdo, $id);
-    }
-
-    return $updated;
+    return getBunkerById($pdo, $id);
 }
 
 function markLatestBunkerFillRequestExecuted($pdo, $bunkerId)
@@ -1500,6 +1680,7 @@ function markLatestBunkerFillRequestExecuted($pdo, $bunkerId)
          FROM bunker_fill_requests
          WHERE bunker_id = :bunkerId
            AND executed_at IS NULL
+           AND cancelled_at IS NULL
          ORDER BY filled_at DESC, id DESC
          LIMIT 1'
     );
@@ -1514,7 +1695,8 @@ function markLatestBunkerFillRequestExecuted($pdo, $bunkerId)
         'UPDATE bunker_fill_requests
          SET executed_at = NOW()
          WHERE id = :id
-           AND executed_at IS NULL'
+           AND executed_at IS NULL
+           AND cancelled_at IS NULL'
     );
     $updateStmt->execute(['id' => (int) $requestId]);
 
@@ -1558,6 +1740,17 @@ function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
             return null;
         }
 
+        $pendingStmt = $pdo->prepare(
+            'SELECT id FROM bunker_fill_requests
+             WHERE bunker_id = :bunkerId AND executed_at IS NULL AND cancelled_at IS NULL
+             ORDER BY filled_at DESC, id DESC LIMIT 1'
+        );
+        $pendingStmt->execute(['bunkerId' => $id]);
+        if ($pendingStmt->fetchColumn() !== false) {
+            $pdo->commit();
+            return $updated;
+        }
+
         $historyStmt = $pdo->prepare(
             'INSERT INTO bunker_fill_requests
              (bunker_id, bunker_number, counterparty_id, contractor, district, address, waste_type, fill_level, filled_by, filled_at)
@@ -1587,6 +1780,280 @@ function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
         }
         throw $e;
     }
+}
+
+function normalizePickupUpload($upload, $kind, $fileToken = null)
+{
+    if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    if (($upload['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException('Не удалось загрузить файл');
+    }
+
+    $maxSize = max(1, (int) (getenv('PICKUP_FILE_MAX_SIZE_BYTES') ?: 10485760));
+    $size = (int) ($upload['size'] ?? 0);
+    if ($size <= 0 || $size > $maxSize) {
+        throw new InvalidArgumentException('Размер файла превышает допустимый лимит');
+    }
+
+    $tmpName = (string) ($upload['tmp_name'] ?? '');
+    $data = $tmpName !== '' ? file_get_contents($tmpName) : false;
+    if ($data === false || strlen($data) !== $size) {
+        throw new InvalidArgumentException('Не удалось прочитать загруженный файл');
+    }
+
+    $contentType = (new finfo(FILEINFO_MIME_TYPE))->buffer($data) ?: '';
+    $allowed = $kind === 'container_waybill'
+        ? ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        : ['image/jpeg', 'image/png', 'image/webp'];
+    if (!in_array($contentType, $allowed, true)) {
+        throw new InvalidArgumentException(
+            $kind === 'container_waybill'
+                ? 'Талон должен быть изображением или PDF'
+                : 'Фото площадки должно быть изображением'
+        );
+    }
+
+    return [
+        'kind' => $kind,
+        'fileToken' => $fileToken !== null ? trim((string) $fileToken) : null,
+        'fileName' => basename((string) ($upload['name'] ?? 'file')),
+        'contentType' => $contentType,
+        'fileSize' => $size,
+        'sha256' => hash('sha256', $data),
+        'data' => $data,
+    ];
+}
+
+function normalizePickupUploads($waybillToken = null)
+{
+    $files = [];
+    $photos = $_FILES['sitePhotos'] ?? null;
+    if (is_array($photos) && is_array($photos['name'] ?? null)) {
+        $count = count($photos['name']);
+        if ($count > 5) {
+            throw new InvalidArgumentException('Можно приложить не более пяти фотографий площадки');
+        }
+        for ($index = 0; $index < $count; $index++) {
+            $upload = [];
+            foreach (['name', 'type', 'tmp_name', 'error', 'size'] as $field) {
+                $upload[$field] = $photos[$field][$index] ?? null;
+            }
+            $file = normalizePickupUpload($upload, 'site_photo');
+            if ($file !== null) {
+                $files[] = $file;
+            }
+        }
+    }
+
+    $waybill = normalizePickupUpload($_FILES['waybill'] ?? null, 'container_waybill', $waybillToken);
+    if ($waybill !== null) {
+        $files[] = $waybill;
+    }
+    return $files;
+}
+
+function createPickupReport($pdo, $payload, $files)
+{
+    $items = $payload['items'] ?? null;
+    if (!is_array($items) || !$items || count($items) > 20) {
+        throw new InvalidArgumentException('Выберите от одного до двадцати бункеров');
+    }
+
+    $cleanupStatus = trim((string) ($payload['cleanupStatus'] ?? ''));
+    if (!in_array($cleanupStatus, ['cleaned', 'not_required', 'not_cleaned'], true)) {
+        throw new InvalidArgumentException('Укажите результат уборки территории');
+    }
+    $cleanupComment = trim((string) ($payload['cleanupComment'] ?? ''));
+    if ($cleanupStatus === 'not_cleaned' && $cleanupComment === '') {
+        throw new InvalidArgumentException('Укажите причину, почему территория не прибрана');
+    }
+
+    $driverSource = trim((string) ($payload['driverSource'] ?? ''));
+    $driverUserId = trim((string) ($payload['driverUserId'] ?? ''));
+    if (!in_array($driverSource, ['telegram', 'max'], true) || $driverUserId === '') {
+        throw new InvalidArgumentException('Не удалось определить водителя');
+    }
+
+    $waybill = null;
+    foreach ($files as $file) {
+        if ($file['kind'] === 'container_waybill') {
+            $waybill = $file;
+            break;
+        }
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $resolved = [];
+        $counterpartyId = null;
+        $contractor = null;
+        $locationKey = null;
+        $billingUnits = 0.0;
+
+        $requestStmt = $pdo->prepare(
+            'SELECT fr.id AS request_id, fr.bunker_id, fr.bunker_number, fr.counterparty_id,
+                    fr.contractor, fr.district, fr.address, b.volume
+             FROM bunker_fill_requests fr
+             JOIN bunkers b ON b.id = fr.bunker_id
+             WHERE fr.bunker_id = :bunkerId
+               AND fr.executed_at IS NULL
+               AND fr.cancelled_at IS NULL
+             ORDER BY fr.filled_at DESC, fr.id DESC
+             LIMIT 1
+             FOR UPDATE'
+        );
+
+        foreach ($items as $item) {
+            $bunkerId = trim((string) ($item['bunkerId'] ?? ''));
+            $units = (float) ($item['billingUnits'] ?? 0);
+            if ($bunkerId === '' || !in_array($units, [1.0, 1.5, 2.0], true)) {
+                throw new InvalidArgumentException('Некорректный бункер или коэффициент');
+            }
+            $requestStmt->execute(['bunkerId' => $bunkerId]);
+            $row = $requestStmt->fetch();
+            if (!$row) {
+                throw new RuntimeException('Для одного из бункеров нет активной заявки');
+            }
+
+            $rowCounterpartyId = $row['counterparty_id'] !== null ? (int) $row['counterparty_id'] : null;
+            $rowLocationKey = trim((string) ($row['district'] ?: $row['address']));
+            if ($counterpartyId === null && $contractor === null) {
+                $counterpartyId = $rowCounterpartyId;
+                $contractor = (string) $row['contractor'];
+                $locationKey = $rowLocationKey;
+            } elseif ($counterpartyId !== $rowCounterpartyId || $contractor !== (string) $row['contractor'] || $locationKey !== $rowLocationKey) {
+                throw new InvalidArgumentException('Один отчёт может содержать бункеры только одного контрагента и площадки');
+            }
+
+            $row['billing_units'] = $units;
+            $row['estimated_volume_m3'] = round(((float) $row['volume']) * $units, 2);
+            $resolved[] = $row;
+            $billingUnits += $units;
+        }
+
+        $waybillRequired = false;
+        if ($counterpartyId !== null && columnExists($pdo, 'counterparties', 'requires_container_waybill')) {
+            $requiredStmt = $pdo->prepare('SELECT requires_container_waybill FROM counterparties WHERE id = :id');
+            $requiredStmt->execute(['id' => $counterpartyId]);
+            $waybillRequired = !empty($requiredStmt->fetchColumn());
+        }
+        $missingReason = trim((string) ($payload['waybillMissingReason'] ?? ''));
+        if ($waybillRequired && $waybill === null && $missingReason === '') {
+            throw new InvalidArgumentException('Укажите причину отсутствия обязательного талона');
+        }
+
+        $reportStmt = $pdo->prepare(
+            'INSERT INTO bunker_pickup_reports
+             (counterparty_id, contractor, driver_source, driver_user_id, driver_name,
+              cleanup_status, cleanup_comment, waybill_required, waybill_missing_reason, billing_units, completed_at)
+             VALUES
+             (:counterpartyId, :contractor, :driverSource, :driverUserId, :driverName,
+              :cleanupStatus, :cleanupComment, :waybillRequired, :waybillMissingReason, :billingUnits, NOW())'
+        );
+        $reportStmt->execute([
+            'counterpartyId' => $counterpartyId,
+            'contractor' => $contractor,
+            'driverSource' => $driverSource,
+            'driverUserId' => $driverUserId,
+            'driverName' => trim((string) ($payload['driverName'] ?? '')) ?: null,
+            'cleanupStatus' => $cleanupStatus,
+            'cleanupComment' => $cleanupComment ?: null,
+            'waybillRequired' => $waybillRequired ? 1 : 0,
+            'waybillMissingReason' => $waybill === null ? ($missingReason ?: null) : null,
+            'billingUnits' => $billingUnits,
+        ]);
+        $reportId = (int) $pdo->lastInsertId();
+
+        $itemStmt = $pdo->prepare(
+            'INSERT INTO bunker_pickup_items
+             (report_id, request_id, bunker_id, bunker_number, billing_units, estimated_volume_m3)
+             VALUES (:reportId, :requestId, :bunkerId, :bunkerNumber, :billingUnits, :estimatedVolume)'
+        );
+        $executeStmt = $pdo->prepare(
+            'UPDATE bunker_fill_requests SET executed_at = NOW()
+             WHERE id = :requestId AND executed_at IS NULL AND cancelled_at IS NULL'
+        );
+        $bunkerStmt = $pdo->prepare(
+            'UPDATE bunkers
+             SET fill_level = 0, last_pickup_date = :pickupDate
+             WHERE id = :bunkerId'
+        );
+        foreach ($resolved as $row) {
+            $itemStmt->execute([
+                'reportId' => $reportId,
+                'requestId' => (int) $row['request_id'],
+                'bunkerId' => (string) $row['bunker_id'],
+                'bunkerNumber' => (int) $row['bunker_number'],
+                'billingUnits' => $row['billing_units'],
+                'estimatedVolume' => $row['estimated_volume_m3'],
+            ]);
+            $executeStmt->execute(['requestId' => (int) $row['request_id']]);
+            if ($executeStmt->rowCount() !== 1) {
+                throw new RuntimeException('Заявка уже обработана');
+            }
+            $bunkerStmt->execute([
+                'bunkerId' => (string) $row['bunker_id'],
+                'pickupDate' => date('Y-m-d'),
+            ]);
+        }
+
+        $fileStmt = $pdo->prepare(
+            'INSERT INTO bunker_pickup_files
+             (report_id, kind, file_token, file_name, content_type, file_size, file_sha256, file_data)
+             VALUES (:reportId, :kind, :fileToken, :fileName, :contentType, :fileSize, :sha256, :fileData)'
+        );
+        foreach ($files as $file) {
+            $fileStmt->bindValue(':reportId', $reportId, PDO::PARAM_INT);
+            $fileStmt->bindValue(':kind', $file['kind']);
+            $fileStmt->bindValue(':fileToken', $file['fileToken'] ?: null);
+            $fileStmt->bindValue(':fileName', $file['fileName']);
+            $fileStmt->bindValue(':contentType', $file['contentType']);
+            $fileStmt->bindValue(':fileSize', $file['fileSize'], PDO::PARAM_INT);
+            $fileStmt->bindValue(':sha256', $file['sha256']);
+            $fileStmt->bindValue(':fileData', $file['data'], PDO::PARAM_LOB);
+            $fileStmt->execute();
+        }
+
+        $pdo->commit();
+        return [
+            'id' => $reportId,
+            'billingUnits' => $billingUnits,
+            'waybillRequired' => $waybillRequired,
+            'waybillAttached' => $waybill !== null,
+        ];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+function cancelFillRequest($pdo, $requestId, $reasonCode, $comment, $cancelledBy)
+{
+    $allowedReasons = ['customer_cancelled', 'no_access', 'not_ready', 'vehicle_breakdown', 'weather', 'other'];
+    if (!in_array($reasonCode, $allowedReasons, true)) {
+        throw new InvalidArgumentException('Выберите причину отмены');
+    }
+    if ($reasonCode === 'other' && trim($comment) === '') {
+        throw new InvalidArgumentException('Укажите комментарий для причины «Другое»');
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE bunker_fill_requests
+         SET cancelled_at = NOW(), cancellation_reason_code = :reasonCode,
+             cancellation_comment = :comment, cancelled_by = :cancelledBy
+         WHERE id = :id AND executed_at IS NULL AND cancelled_at IS NULL'
+    );
+    $stmt->execute([
+        'id' => (int) $requestId,
+        'reasonCode' => $reasonCode,
+        'comment' => trim($comment) ?: null,
+        'cancelledBy' => $cancelledBy,
+    ]);
+    return $stmt->rowCount() === 1;
 }
 
 function deleteBunkerById($pdo, $id)
@@ -1744,6 +2211,67 @@ if ($route === 'counterparties' && $method === 'GET') {
     }
 }
 
+// GET /api/drivers — контакты водителей только для сотрудников
+if ($route === 'drivers' && $method === 'GET') {
+    requireStaffReadAuth($config);
+    try {
+        $pdo = getBunkersDb($legacyDataFile);
+        jsonResponse(listDriverContacts($pdo));
+    } catch (Throwable $e) {
+        logThrowable('driver_contacts_get_failed', $e);
+        jsonResponse(['error' => 'Не удалось загрузить контакты водителей'], 500);
+    }
+}
+
+// POST /api/pickup-reports — завершить вывоз с подтверждениями
+if ($route === 'pickup-reports' && $method === 'POST') {
+    requireWriteAuth($config);
+    try {
+        $pdo = getBunkersDb($legacyDataFile);
+        $payload = json_decode((string) ($_POST['payload'] ?? ''), true);
+        if (!is_array($payload)) {
+            throw new InvalidArgumentException('Некорректные данные отчёта');
+        }
+        $files = normalizePickupUploads($payload['waybillToken'] ?? null);
+        jsonResponse(createPickupReport($pdo, $payload, $files), 201);
+    } catch (Throwable $e) {
+        logThrowable('pickup_report_create_failed', $e);
+        if ($e instanceof InvalidArgumentException) {
+            jsonResponse(['error' => $e->getMessage()], 400);
+        }
+        if ($e instanceof RuntimeException) {
+            jsonResponse(['error' => $e->getMessage()], 409);
+        }
+        jsonResponse(['error' => 'Не удалось сохранить отчёт о вывозе'], 500);
+    }
+}
+
+// POST /api/fill-requests/:id/cancel — отменить активную заявку
+if ($route === 'fill-requests' && $method === 'POST' && $id && $idAction === 'cancel') {
+    requireStaffWriteAuth($config);
+    try {
+        $body = getRequestBody();
+        $pdo = getBunkersDb($legacyDataFile);
+        $cancelled = cancelFillRequest(
+            $pdo,
+            (int) $id,
+            trim((string) ($body['reasonCode'] ?? '')),
+            trim((string) ($body['comment'] ?? '')),
+            isBotAuthed($config) ? 'bot' : (string) ($_SESSION['user'] ?? 'unknown')
+        );
+        if (!$cancelled) {
+            jsonResponse(['error' => 'Заявка уже исполнена, отменена или не найдена'], 409);
+        }
+        jsonResponse(['success' => true]);
+    } catch (Throwable $e) {
+        logThrowable('fill_request_cancel_failed', $e, ['requestId' => $id]);
+        if ($e instanceof InvalidArgumentException) {
+            jsonResponse(['error' => $e->getMessage()], 400);
+        }
+        jsonResponse(['error' => 'Не удалось отменить заявку'], 500);
+    }
+}
+
 // /api/bunkers
 if ($route === 'bunkers') {
     try {
@@ -1839,7 +2367,7 @@ if ($route === 'bunkers') {
 
     // POST /api/bunkers — создание
     if ($method === 'POST' && !$id) {
-        requireWriteAuth($config);
+        requireStaffWriteAuth($config);
         try {
             $body = getRequestBody();
             $newBunker = createBunker($pdo, $body);
@@ -1855,7 +2383,7 @@ if ($route === 'bunkers') {
 
     // PUT /api/bunkers/:id — обновление
     if ($method === 'PUT' && $id && !$idAction) {
-        requireWriteAuth($config);
+        requireStaffWriteAuth($config);
         try {
             $body = getRequestBody();
             $updated = updateBunker($pdo, $id, $body);
@@ -1876,7 +2404,7 @@ if ($route === 'bunkers') {
 
     // DELETE /api/bunkers/:id — удаление
     if ($method === 'DELETE' && $id && !$idAction) {
-        requireWriteAuth($config);
+        requireStaffWriteAuth($config);
         try {
             $deleted = deleteBunkerById($pdo, $id);
 

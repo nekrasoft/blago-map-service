@@ -62,6 +62,13 @@ if ($isCounterpartyUser) {
       <label class="filter-checkbox"><input type="checkbox" id="filter-full"> Заполненные</label>
     </div>
 
+    <?php if (!$isCounterpartyUser): ?>
+    <div id="driver-contacts" class="driver-contacts hidden">
+      <strong>Водители</strong>
+      <div id="driver-contacts-list"></div>
+    </div>
+    <?php endif; ?>
+
     <ul id="bunker-list"></ul>
   </aside>
 
@@ -140,6 +147,40 @@ if ($isCounterpartyUser) {
       </form>
     </div>
   </div>
+
+  <?php if (!$isReadonlyUser && !$isCounterpartyUser): ?>
+  <div id="cancel-request-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Отменить заявку</h2>
+        <button type="button" id="cancel-request-close" class="btn-icon" title="Закрыть">&times;</button>
+      </div>
+      <form id="cancel-request-form">
+        <input type="hidden" id="cancel-request-id">
+        <div class="form-row">
+          <label for="cancel-request-reason">Причина</label>
+          <select id="cancel-request-reason" required>
+            <option value="">Выберите причину</option>
+            <option value="customer_cancelled">Клиент отменил</option>
+            <option value="no_access">Нет доступа или подъезда</option>
+            <option value="not_ready">Бункер не готов</option>
+            <option value="vehicle_breakdown">Поломка техники</option>
+            <option value="weather">Погодные условия</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
+        <div id="cancel-request-comment-row" class="form-row hidden">
+          <label for="cancel-request-comment">Комментарий</label>
+          <textarea id="cancel-request-comment" maxlength="500"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-danger">Отменить заявку</button>
+          <button type="button" id="cancel-request-back" class="btn btn-secondary">Назад</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <script>
     window.READONLY_USER = <?= json_encode($isReadonlyUser) ?>;

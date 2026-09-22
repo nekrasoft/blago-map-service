@@ -74,6 +74,9 @@
 | GET    | /api/bunkers        | Список бункеров (?district=...&wasteType=...&contractor=...&counterpartyId=...) |
 | POST   | /api/bunkers        | Создание бункера                                              |
 | POST   | /api/bunkers/:id/mark-filled | Отметить бункер заполненным (fillLevel=100, сохраняет кто/когда, отправляет MAX-уведомление при настройке) |
+| POST   | /api/pickup-reports | Завершить вывоз, сохранить коэффициенты, уборку, фото и талон |
+| POST   | /api/fill-requests/:id/cancel | Отменить активную заявку с причиной |
+| GET    | /api/drivers | Активные контакты водителей для сотрудников |
 | PUT    | /api/bunkers/:id    | Обновление бункера                                            |
 | DELETE | /api/bunkers/:id    | Удаление бункера                                              |
 
