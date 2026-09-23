@@ -349,7 +349,7 @@ function buildBalloonFooter(b) {
     if (counterpartyIdScope !== null && Number(b.counterpartyId || 0) !== counterpartyIdScope) {
       return '';
     }
-    const isAlreadyFilled = Boolean(b.pendingRequestId);
+    const isAlreadyFilled = Number(b.fillLevel) >= 100;
     return '' +
       '<div class="balloon-content">' +
         '<div class="balloon-actions">' +
@@ -636,7 +636,7 @@ async function markBunkerFilled(id) {
     return;
   }
 
-  if (bunker.pendingRequestId) {
+  if (Number(bunker.fillLevel) >= 100) {
     return;
   }
 
