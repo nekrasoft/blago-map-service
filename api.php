@@ -1743,22 +1743,12 @@ function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
         $pendingStmt = $pdo->prepare(
             'SELECT id FROM bunker_fill_requests
              WHERE bunker_id = :bunkerId AND executed_at IS NULL AND cancelled_at IS NULL
-             ORDER BY filled_at DESC, id DESC LIMIT 1'
+             ORDER BY filled_at DESC, id DESC LIMIT 1
+             FOR UPDATE'
         );
         $pendingStmt->execute(['bunkerId' => $id]);
-        if ($pendingStmt->fetchColumn() !== false) {
-            $pdo->commit();
-            return $updated;
-        }
-
-        $historyStmt = $pdo->prepare(
-            'INSERT INTO bunker_fill_requests
-             (bunker_id, bunker_number, counterparty_id, contractor, district, address, waste_type, fill_level, filled_by, filled_at)
-             VALUES
-             (:bunkerId, :bunkerNumber, :counterpartyId, :contractor, :district, :address, :wasteType, :fillLevel, :filledBy, :filledAt)'
-        );
-        $historyStmt->execute([
-            'bunkerId' => (string) ($updated['id'] ?? $id),
+        $pendingRequestId = $pendingStmt->fetchColumn();
+        $requestParams = [
             'bunkerNumber' => (int) ($updated['number'] ?? 0),
             'counterpartyId' => array_key_exists('counterpartyId', $updated) && $updated['counterpartyId'] !== null
                 ? (int) $updated['counterpartyId']
@@ -1770,7 +1760,33 @@ function markBunkerFilled($pdo, $id, $filledBy, $fillLevel = 100)
             'fillLevel' => $fillLevel,
             'filledBy' => (string) $filledBy,
             'filledAt' => $filledAt,
+        ];
+
+        if ($pendingRequestId !== false) {
+            $refreshStmt = $pdo->prepare(
+                'UPDATE bunker_fill_requests
+                 SET bunker_number = :bunkerNumber, counterparty_id = :counterpartyId,
+                     contractor = :contractor, district = :district, address = :address,
+                     waste_type = :wasteType, fill_level = :fillLevel,
+                     filled_by = :filledBy, filled_at = :filledAt
+                 WHERE id = :id'
+            );
+            $refreshStmt->execute($requestParams + ['id' => (int) $pendingRequestId]);
+            $updated['pendingRequestId'] = (int) $pendingRequestId;
+            $pdo->commit();
+            return $updated;
+        }
+
+        $historyStmt = $pdo->prepare(
+            'INSERT INTO bunker_fill_requests
+             (bunker_id, bunker_number, counterparty_id, contractor, district, address, waste_type, fill_level, filled_by, filled_at)
+             VALUES
+             (:bunkerId, :bunkerNumber, :counterpartyId, :contractor, :district, :address, :wasteType, :fillLevel, :filledBy, :filledAt)'
+        );
+        $historyStmt->execute($requestParams + [
+            'bunkerId' => (string) ($updated['id'] ?? $id),
         ]);
+        $updated['pendingRequestId'] = (int) $pdo->lastInsertId();
 
         $pdo->commit();
         return $updated;
