@@ -1908,9 +1908,10 @@ function createPickupReport($pdo, $payload, $files)
         $locationKey = null;
         $billingUnits = 0.0;
 
+        // Заявка может хранить контрагента до перевязки бункера.
         $requestStmt = $pdo->prepare(
-            'SELECT fr.id AS request_id, fr.bunker_id, fr.bunker_number, fr.counterparty_id,
-                    fr.contractor, fr.district, fr.address, b.volume
+            'SELECT fr.id AS request_id, fr.bunker_id, b.`number` AS bunker_number, b.counterparty_id,
+                    b.contractor, b.district, b.address, b.volume
              FROM bunker_fill_requests fr
              JOIN bunkers b ON b.id = fr.bunker_id
              WHERE fr.bunker_id = :bunkerId
