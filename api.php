@@ -1847,9 +1847,10 @@ function normalizePickupUploads($waybillToken = null)
     $files = [];
     $photos = $_FILES['sitePhotos'] ?? null;
     if (is_array($photos) && is_array($photos['name'] ?? null)) {
+        $maxPhotos = 10;
         $count = count($photos['name']);
-        if ($count > 5) {
-            throw new InvalidArgumentException('Можно приложить не более пяти фотографий площадки');
+        if ($count > $maxPhotos) {
+            throw new InvalidArgumentException("Можно приложить не более {$maxPhotos} фотографий площадки");
         }
         for ($index = 0; $index < $count; $index++) {
             $upload = [];
