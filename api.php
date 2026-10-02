@@ -1842,7 +1842,7 @@ function normalizePickupUpload($upload, $kind, $fileToken = null)
     ];
 }
 
-function normalizePickupUploads($waybillToken = null)
+function normalizePickupUploads($waybillTokens = [])
 {
     $files = [];
     $photos = $_FILES['sitePhotos'] ?? null;
@@ -1864,9 +1864,33 @@ function normalizePickupUploads($waybillToken = null)
         }
     }
 
-    $waybill = normalizePickupUpload($_FILES['waybill'] ?? null, 'container_waybill', $waybillToken);
-    if ($waybill !== null) {
-        $files[] = $waybill;
+    $waybillTokens = is_array($waybillTokens) ? array_values($waybillTokens) : [];
+    $waybills = $_FILES['waybills'] ?? null;
+    if (is_array($waybills) && is_array($waybills['name'] ?? null)) {
+        $count = count($waybills['name']);
+        $maxWaybills = 5;
+        if ($count > $maxWaybills) {
+            throw new InvalidArgumentException("Можно приложить не более {$maxWaybills} талонов");
+        }
+        for ($index = 0; $index < $count; $index++) {
+            $upload = [];
+            foreach (['name', 'type', 'tmp_name', 'error', 'size'] as $field) {
+                $upload[$field] = $waybills[$field][$index] ?? null;
+            }
+            $file = normalizePickupUpload($upload, 'container_waybill', $waybillTokens[$index] ?? null);
+            if ($file !== null) {
+                $files[] = $file;
+            }
+        }
+    } else {
+        $waybill = normalizePickupUpload(
+            $_FILES['waybill'] ?? null,
+            'container_waybill',
+            $waybillTokens[0] ?? null,
+        );
+        if ($waybill !== null) {
+            $files[] = $waybill;
+        }
     }
     return $files;
 }
@@ -2250,7 +2274,11 @@ if ($route === 'pickup-reports' && $method === 'POST') {
         if (!is_array($payload)) {
             throw new InvalidArgumentException('Некорректные данные отчёта');
         }
-        $files = normalizePickupUploads($payload['waybillToken'] ?? null);
+        $waybillTokens = $payload['waybillTokens'] ?? [];
+        if (!$waybillTokens && !empty($payload['waybillToken'])) {
+            $waybillTokens = [$payload['waybillToken']];
+        }
+        $files = normalizePickupUploads($waybillTokens);
         jsonResponse(createPickupReport($pdo, $payload, $files), 201);
     } catch (Throwable $e) {
         logThrowable('pickup_report_create_failed', $e);
