@@ -183,10 +183,29 @@ body.sidebar-hidden .sidebar-toggle {
 }
 
 .driver-contacts a {
-  display: block;
-  margin-top: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
   color: #4361ee;
   text-decoration: none;
+}
+
+.driver-contact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.driver-contact-details {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 #bunker-list {
@@ -525,6 +544,7 @@ body.sidebar-hidden .sidebar-toggle {
 
 .balloon-content .balloon-actions button {
   flex: 1;
+  min-height: 44px;
   padding: 6px 10px;
   border: none;
   border-radius: 4px;
@@ -576,5 +596,11 @@ body.sidebar-hidden .sidebar-toggle {
 
   .balloon-content .balloon-label {
     flex-shrink: 0;
+  }
+
+  .balloon-content a[href^="tel:"] {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
   }
 }

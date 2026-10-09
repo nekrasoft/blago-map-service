@@ -129,10 +129,21 @@ async function loadDriverContacts() {
     const drivers = await DriverAPI.getAll();
     list.replaceChildren();
     drivers.forEach(function (driver) {
+      const row = document.createElement('div');
+      row.className = 'driver-contact';
+      const details = document.createElement('span');
+      details.className = 'driver-contact-details';
+      const name = document.createElement('span');
+      name.textContent = driver.name;
+      const phone = document.createElement('small');
+      phone.textContent = driver.phone;
+      details.append(name, phone);
       const link = document.createElement('a');
       link.href = 'tel:' + driver.phone;
-      link.textContent = driver.name + ': ' + driver.phone;
-      list.appendChild(link);
+      link.textContent = 'Позвонить';
+      link.setAttribute('aria-label', 'Позвонить водителю ' + driver.name);
+      row.append(details, link);
+      list.appendChild(row);
     });
     container.classList.toggle('hidden', drivers.length === 0);
   } catch (err) {
