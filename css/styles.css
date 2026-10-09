@@ -50,6 +50,10 @@ body.sidebar-hidden #sidebar {
   transition: left 0.25s ease;
 }
 
+.sidebar-close {
+  display: none;
+}
+
 body.sidebar-hidden .sidebar-toggle {
   display: block;
 }
@@ -560,15 +564,15 @@ body.sidebar-hidden .sidebar-toggle {
 
 /* ===== Мобильные устройства ===== */
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
   body,
   #map {
     height: 100dvh;
   }
 
   #sidebar {
-    width: 85%;
-    min-width: 280px;
+    width: min(360px, 85vw);
+    min-width: 0;
     height: 100dvh;
     max-height: 100dvh;
     position: fixed;
@@ -577,6 +581,7 @@ body.sidebar-hidden .sidebar-toggle {
   }
 
   #bunker-list {
+    min-height: 0;
     padding-bottom: 88px;
     scroll-padding-bottom: 88px;
     padding-bottom: calc(88px + env(safe-area-inset-bottom));
@@ -585,9 +590,28 @@ body.sidebar-hidden .sidebar-toggle {
   }
 
   .sidebar-toggle {
+    top: 12px;
+    transform: none;
+    min-height: 44px;
     padding: 12px 14px;
     font-size: 0.85rem;
   }
+
+  .sidebar-close {
+    display: inline-flex;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-auth { padding: 6px 12px; gap: 8px; }
+  .sidebar-auth .auth-user-wrap { flex-wrap: wrap; }
+  .sidebar-auth .auth-user { overflow-wrap: anywhere; }
+  .sidebar-auth .auth-actions { flex-shrink: 0; }
+
+  .sidebar-header { padding: 12px; }
+  .sidebar-header h1 { font-size: 1.1rem; }
 
   .balloon-content {
     min-width: 0;
@@ -603,4 +627,9 @@ body.sidebar-hidden .sidebar-toggle {
     min-height: 44px;
     align-items: center;
   }
+}
+
+@media (max-height: 500px) and (pointer: coarse) {
+  .filters { padding: 6px 12px; }
+  .driver-contacts { padding: 6px 12px; max-height: 110px; overflow-y: auto; flex-shrink: 0; }
 }

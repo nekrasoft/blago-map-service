@@ -38,6 +38,7 @@ if ($isCounterpartyUser) {
       </div>
       <div class="auth-actions">
         <button id="btn-logout" class="btn btn-secondary" title="Выйти">Выйти</button>
+        <button id="btn-hide-sidebar" type="button" class="sidebar-close btn-icon" aria-label="Скрыть список бункеров" title="Скрыть список">&times;</button>
       </div>
     </div>
     <div class="sidebar-header">

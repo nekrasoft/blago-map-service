@@ -107,6 +107,7 @@ function init() {
     controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
   }, {
     balloonPanelMaxMapArea: isMobileView() ? Infinity : 0,
+    balloonPanelMaxHeightRatio: 1,
     balloonMaxWidth: 400
   });
 
@@ -872,7 +873,7 @@ function showSidebar() {
 }
 
 function isMobileView() {
-  return window.matchMedia('(max-width: 768px)').matches;
+  return window.matchMedia('(max-width: 768px), (max-height: 500px) and (pointer: coarse)').matches;
 }
 
 // Свайп влево для скрытия панели
@@ -911,6 +912,11 @@ function bindEvents() {
   document.getElementById('filter-full').addEventListener('change', applyFilters);
   document.getElementById('form-address').addEventListener('keydown', handleAddressKeydown);
   document.getElementById('btn-toggle-sidebar').addEventListener('click', showSidebar);
+  document.getElementById('btn-hide-sidebar').addEventListener('click', hideSidebar);
+  window.matchMedia('(max-width: 768px), (max-height: 500px) and (pointer: coarse)').addEventListener('change', function () {
+    showSidebar();
+    map.options.set('balloonPanelMaxMapArea', isMobileView() ? Infinity : 0);
+  });
 
   document.getElementById('modal-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
