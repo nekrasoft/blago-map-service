@@ -62,12 +62,10 @@ if ($isCounterpartyUser) {
       <label class="filter-checkbox"><input type="checkbox" id="filter-full"> Заполненные</label>
     </div>
 
-    <?php if (!$isCounterpartyUser): ?>
     <div id="driver-contacts" class="driver-contacts hidden">
       <strong>Водители</strong>
       <div id="driver-contacts-list"></div>
     </div>
-    <?php endif; ?>
 
     <ul id="bunker-list"></ul>
   </aside>

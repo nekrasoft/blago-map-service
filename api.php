@@ -2253,9 +2253,9 @@ if ($route === 'counterparties' && $method === 'GET') {
     }
 }
 
-// GET /api/drivers — контакты водителей только для сотрудников
+// GET /api/drivers — контакты водителей для авторизованных пользователей
 if ($route === 'drivers' && $method === 'GET') {
-    requireStaffReadAuth($config);
+    requireReadAuth($config);
     try {
         $pdo = getBunkersDb($legacyDataFile);
         jsonResponse(listDriverContacts($pdo));
