@@ -325,9 +325,11 @@ function buildBalloonBody(b) {
         '<span class="balloon-value">' + b.wasteType + '</span>' +
       '</div>' +
       '<div class="balloon-row">' +
-        '<span class="balloon-label">Заполненность:</span>' +
+        '<span class="balloon-label">' + (Number(b.fillLevel) < 100 ? 'Прогноз заполненности:' : 'Заполненность:') + '</span>' +
         '<span class="balloon-value"><span class="bunker-fill-badge fill-' + cls + '">' + b.fillLevel + '%</span></span>' +
       '</div>' +
+      '<div class="balloon-row"><span class="balloon-label">Заявка:</span><span class="balloon-value">' +
+        (b.pendingRequestId ? 'Принята' + (b.filledAt ? ' · ' + formatDateTime(b.filledAt) : '') : 'Нет активной заявки') + '</span></div>' +
       ((b.filledAt || b.filledBy) ? '<div class="balloon-row">' +
         '<span class="balloon-label">Отметка:</span>' +
         '<span class="balloon-value">' + (b.filledAt ? formatDateTime(b.filledAt) : '—') + (b.filledBy ? ' (' + b.filledBy + ')' : '') + '</span>' +
