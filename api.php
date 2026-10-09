@@ -1198,6 +1198,20 @@ function ensureBunkerPickupSchema($pdo)
     }
 
     initBunkerPickupReportsTables($pdo);
+    foreach (['submission_key' => 'VARCHAR(36) NULL', 'submission_hash' => 'CHAR(64) NULL',
+        'sheet_row' => 'TEXT NULL', 'sheets_status' => 'VARCHAR(20) NULL',
+        'sheets_attempts' => 'INT UNSIGNED NOT NULL DEFAULT 0', 'sheets_next_attempt_at' => 'DATETIME NULL',
+        'sheets_delivery_token' => 'VARCHAR(36) NULL', 'sheets_error' => 'VARCHAR(255) NULL'] as $name => $definition) {
+        if (!columnExists($pdo, 'bunker_pickup_reports', $name)) {
+            $pdo->exec("ALTER TABLE bunker_pickup_reports ADD COLUMN {$name} {$definition}");
+        }
+    }
+    if (!indexExists($pdo, 'bunker_pickup_reports', 'uq_pickup_submission')) {
+        $pdo->exec('ALTER TABLE bunker_pickup_reports ADD UNIQUE INDEX uq_pickup_submission (submission_key)');
+    }
+    if (!indexExists($pdo, 'bunker_pickup_reports', 'idx_pickup_sheets_due')) {
+        $pdo->exec('ALTER TABLE bunker_pickup_reports ADD INDEX idx_pickup_sheets_due (sheets_status, sheets_next_attempt_at, id)');
+    }
     initDriverContactsTable($pdo);
     $ensured[$key] = true;
 }
@@ -1895,8 +1909,45 @@ function normalizePickupUploads($waybillTokens = [])
     return $files;
 }
 
+function findPickupSubmission($pdo, $key, $hash)
+{
+    if ($key === null) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT id, submission_hash, billing_units, waybill_required, sheets_status FROM bunker_pickup_reports WHERE submission_key = :key');
+    $stmt->execute(['key' => $key]);
+    $report = $stmt->fetch();
+    if (!$report) {
+        return null;
+    }
+    if (!hash_equals($report['submission_hash'], $hash)) {
+        throw new InvalidArgumentException('Этот отчёт уже отправлен с другими данными');
+    }
+    $files = $pdo->prepare("SELECT COUNT(*) FROM bunker_pickup_files WHERE report_id = :id AND kind = 'container_waybill'");
+    $files->execute(['id' => $report['id']]);
+    return ['id' => (int) $report['id'], 'billingUnits' => (float) $report['billing_units'],
+        'waybillRequired' => (bool) $report['waybill_required'], 'waybillAttached' => $files->fetchColumn() > 0,
+        'sheetQueued' => $report['sheets_status'] !== null];
+}
+
 function createPickupReport($pdo, $payload, $files)
 {
+    $submissionKey = $payload['submissionKey'] ?? null;
+    if ($submissionKey !== null && (!is_string($submissionKey) || !preg_match('/^[a-f0-9-]{36}$/D', $submissionKey))) {
+        throw new InvalidArgumentException('Некорректный идентификатор отправки');
+    }
+    $submissionHash = hash('sha256', json_encode([$payload, array_map(fn ($file) => [
+        $file['kind'], $file['fileName'], $file['contentType'], $file['sha256'], $file['fileToken'],
+    ], $files)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $existing = findPickupSubmission($pdo, $submissionKey, $submissionHash);
+    if ($existing !== null) {
+        return $existing;
+    }
+    $sheetRow = $payload['sheetRow'] ?? null;
+    if ($sheetRow !== null && ($submissionKey === null || !is_array($sheetRow) || !$sheetRow
+        || strlen(json_encode($sheetRow)) > 16384)) {
+        throw new InvalidArgumentException('Некорректная строка расчётной таблицы');
+    }
     $items = $payload['items'] ?? null;
     if (!is_array($items) || !$items || count($items) > 20) {
         throw new InvalidArgumentException('Выберите от одного до двадцати бункеров');
@@ -1988,13 +2039,18 @@ function createPickupReport($pdo, $payload, $files)
 
         $reportStmt = $pdo->prepare(
             'INSERT INTO bunker_pickup_reports
-             (counterparty_id, contractor, driver_source, driver_user_id, driver_name,
+             (submission_key, submission_hash, sheet_row, sheets_status, sheets_next_attempt_at, counterparty_id, contractor, driver_source, driver_user_id, driver_name,
               cleanup_status, cleanup_comment, waybill_required, waybill_missing_reason, billing_units, completed_at)
              VALUES
-             (:counterpartyId, :contractor, :driverSource, :driverUserId, :driverName,
+             (:submissionKey, :submissionHash, :sheetRow, :sheetsStatus, CASE WHEN :hasSheetRow THEN NOW() ELSE NULL END, :counterpartyId, :contractor, :driverSource, :driverUserId, :driverName,
               :cleanupStatus, :cleanupComment, :waybillRequired, :waybillMissingReason, :billingUnits, NOW())'
         );
         $reportStmt->execute([
+            'submissionKey' => $submissionKey,
+            'submissionHash' => $submissionHash,
+            'sheetRow' => $sheetRow !== null ? json_encode($sheetRow, JSON_UNESCAPED_UNICODE) : null,
+            'sheetsStatus' => $sheetRow !== null ? 'pending' : null,
+            'hasSheetRow' => $sheetRow !== null ? 1 : 0,
             'counterpartyId' => $counterpartyId,
             'contractor' => $contractor,
             'driverSource' => $driverSource,
@@ -2064,10 +2120,16 @@ function createPickupReport($pdo, $payload, $files)
             'billingUnits' => $billingUnits,
             'waybillRequired' => $waybillRequired,
             'waybillAttached' => $waybill !== null,
+            'sheetQueued' => $sheetRow !== null,
         ];
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
+        }
+        // A concurrent retry may have committed while this request waited on a bunker lock.
+        $existing = findPickupSubmission($pdo, $submissionKey, $submissionHash);
+        if ($existing !== null) {
+            return $existing;
         }
         throw $e;
     }
@@ -2263,6 +2325,20 @@ if ($route === 'drivers' && $method === 'GET') {
         logThrowable('driver_contacts_get_failed', $e);
         jsonResponse(['error' => 'Не удалось загрузить контакты водителей'], 500);
     }
+}
+
+// Delivery endpoints are available only to the bot's write API key.
+if ($route === 'pickup-delivery/claim' && $method === 'POST') {
+    requireWriteAuth($config);
+    require_once __DIR__ . '/pickup_delivery.php';
+    jsonResponse(claimPickupDelivery(getBunkersDb($legacyDataFile)));
+}
+if ($route === 'pickup-delivery/ack' && $method === 'POST') {
+    requireWriteAuth($config);
+    require_once __DIR__ . '/pickup_delivery.php';
+    $body = getRequestBody();
+    acknowledgePickupDelivery(getBunkersDb($legacyDataFile), $body);
+    jsonResponse(['ok' => true]);
 }
 
 // POST /api/pickup-reports — завершить вывоз с подтверждениями
