@@ -222,6 +222,15 @@ async function loadBunkers(filters, options) {
       allBunkers = allBunkers.filter(b => Number(b.fillLevel) === 100);
     }
     renderMarkers();
+    if (opts.fitToBunkers) {
+      const targetId = new URLSearchParams(window.location.search).get('bunker');
+      const targetIndex = allBunkers.findIndex(b => b.id === targetId);
+      if (targetIndex >= 0) {
+        map.setCenter([allBunkers[targetIndex].lat, allBunkers[targetIndex].lng], 17);
+        placemarks[targetIndex].balloon.open();
+        opts.fitToBunkers = false;
+      }
+    }
     renderList();
     updateFilterOptions();
     document.getElementById('bunker-count').textContent = allBunkers.length;
