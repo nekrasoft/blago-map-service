@@ -349,11 +349,11 @@ function buildBalloonFooter(b) {
     if (counterpartyIdScope !== null && Number(b.counterpartyId || 0) !== counterpartyIdScope) {
       return '';
     }
-    const isAlreadyFilled = Number(b.fillLevel) >= 100;
+    const isAlreadyFilled = Boolean(b.pendingRequestId);
     return '' +
       '<div class="balloon-content">' +
         '<div class="balloon-actions">' +
-          '<button class="btn btn-primary" onclick="markBunkerFilled(\'' + b.id + '\')" ' + (isAlreadyFilled ? 'disabled' : '') + '>' + (isAlreadyFilled ? 'Уже заполнен' : 'Отметить заполненным') + '</button>' +
+          '<button class="btn btn-primary" onclick="markBunkerFilled(\'' + b.id + '\')" ' + (isAlreadyFilled ? 'disabled' : '') + '>' + (isAlreadyFilled ? 'Заявка принята' : 'Заказать вывоз') + '</button>' +
         '</div>' +
       '</div>';
   }
@@ -636,11 +636,11 @@ async function markBunkerFilled(id) {
     return;
   }
 
-  if (Number(bunker.fillLevel) >= 100) {
+  if (bunker.pendingRequestId) {
     return;
   }
 
-  if (!confirm('Подтвердить, что бункер заполнен?')) {
+  if (!confirm('Заказать вывоз бункера ' + displayNumber(bunker.number) + '?')) {
     return;
   }
 
@@ -649,6 +649,7 @@ async function markBunkerFilled(id) {
     await BunkerAPI.markFilled(id);
     await refreshFilterOptions();
     await loadBunkers();
+    alert('Заявка на вывоз принята. Бункер ' + displayNumber(bunker.number) + '.');
   } catch (err) {
     if (err.message === 'auth_required') {
       window.location.href = '/login';
