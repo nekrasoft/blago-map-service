@@ -502,6 +502,7 @@ body.sidebar-hidden .sidebar-toggle {
 .balloon-content .balloon-row {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   padding: 3px 0;
 }
 
@@ -511,6 +512,9 @@ body.sidebar-hidden .sidebar-toggle {
 
 .balloon-content .balloon-value {
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .balloon-content .balloon-actions {
@@ -563,5 +567,14 @@ body.sidebar-hidden .sidebar-toggle {
   .sidebar-toggle {
     padding: 12px 14px;
     font-size: 0.85rem;
+  }
+
+  .balloon-content {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .balloon-content .balloon-label {
+    flex-shrink: 0;
   }
 }

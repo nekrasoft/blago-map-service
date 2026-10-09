@@ -105,6 +105,9 @@ function init() {
     center: DEFAULT_CENTER,
     zoom: DEFAULT_ZOOM,
     controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
+  }, {
+    balloonPanelMaxMapArea: isMobileView() ? Infinity : 0,
+    balloonMaxWidth: 400
   });
 
   if (canManageBunkers) {
